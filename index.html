@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RIYAS NGL Fractionation — Fabrication Status</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg: #0d1117;
+    --panel: #151c25;
+    --panel-2: #1b2430;
+    --line: #26313f;
+    --text: #e7ecf2;
+    --muted: #8a97a8;
+    --steel: #4fa3d1;
+    --amber: #f2a541;
+    --green: #3ecf8e;
+    --red: #e05353;
+    --pk1: #4fa3d1;
+    --pk2: #f2a541;
+    --radius: 6px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono{ font-family:'IBM Plex Mono', monospace; }
+  header{
+    border-bottom: 1px solid var(--line);
+    padding: 22px 32px;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    flex-wrap:wrap;
+    gap:16px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+  }
+  .brand-eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.14em;
+    color: var(--amber);
+    text-transform:uppercase;
+    margin-bottom:6px;
+  }
+  h1{
+    font-family:'Oswald', sans-serif;
+    font-weight:600;
+    font-size: 26px;
+    letter-spacing:0.01em;
+    margin:0;
+    text-transform:uppercase;
+  }
+  .subtitle{ color:var(--muted); font-size:13px; margin-top:4px;}
+  .status-pill{
+    display:flex; align-items:center; gap:8px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    color: var(--muted);
+    border:1px solid var(--line);
+    padding:6px 12px;
+    border-radius: 20px;
+    background: var(--panel);
+  }
+  .dot{ width:7px; height:7px; border-radius:50%; background: var(--green); box-shadow:0 0 8px var(--green); }
+  .dot.err{ background: var(--red); box-shadow:0 0 8px var(--red);}
+  .dot.loading{ background: var(--amber); box-shadow:0 0 8px var(--amber); animation: pulse 1.2s infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+  main{ padding: 28px 32px 60px; max-width:1440px; margin:0 auto; }
+
+  .kpi-row{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px,1fr));
+    gap:14px;
+    margin-bottom: 28px;
+  }
+  .kpi{
+    background: var(--panel);
+    border:1px solid var(--line);
+    border-radius: var(--radius);
+    padding:16px 18px;
+    position:relative;
+    overflow:hidden;
+  }
+  .kpi::before{
+    content:"";
+    position:absolute; left:0; top:0; bottom:0; width:3px;
+    background: var(--accent, var(--steel));
+  }
+  .kpi-label{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-bottom:8px;
+  }
+  .kpi-value{
+    font-family:'Oswald', sans-serif;
+    font-size: 30px;
+    font-weight:600;
+    line-height:1;
+  }
+  .kpi-sub{ font-size:11.5px; color:var(--muted); margin-top:6px; font-family:'IBM Plex Mono', monospace;}
+
+  .packages{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap:16px;
+    margin-bottom: 28px;
+  }
+  @media (max-width: 760px){ .packages{ grid-template-columns:1fr; } }
+
+  .pkg-card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius: var(--radius);
+    padding:18px 20px;
+  }
+  .pkg-head{
+    display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;
+  }
+  .pkg-title{
+    font-family:'Oswald', sans-serif;
+    font-size:17px;
+    letter-spacing:0.03em;
+    display:flex; align-items:center; gap:8px;
+  }
+  .pkg-swatch{ width:10px; height:10px; border-radius:2px; }
+  .pkg-count{ color:var(--muted); font-size:12px; font-family:'IBM Plex Mono', monospace;}
+
+  .bar-block{ margin-bottom:12px; }
+  .bar-label{
+    display:flex; justify-content:space-between;
+    font-size:11.5px; color:var(--muted);
+    font-family:'IBM Plex Mono', monospace;
+    margin-bottom:5px;
+  }
+  .bar-track{
+    height:9px; background: var(--panel-2); border-radius:5px; overflow:hidden; border:1px solid var(--line);
+  }
+  .bar-fill{ height:100%; border-radius:5px; transition: width 0.6s ease; }
+
+  .toolbar{
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+    margin-bottom:14px;
+  }
+  .toolbar input, .toolbar select{
+    background: var(--panel);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:9px 12px;
+    border-radius: var(--radius);
+    font-size:13px;
+    font-family:'Inter', sans-serif;
+  }
+  .toolbar input{ flex:1; min-width:200px; }
+  .toolbar input::placeholder{ color:var(--muted); }
+  .toolbar .count{ color:var(--muted); font-size:12px; font-family:'IBM Plex Mono', monospace; margin-left:auto; }
+
+  table{
+    width:100%;
+    border-collapse: collapse;
+    background: var(--panel);
+    border:1px solid var(--line);
+    border-radius: var(--radius);
+    overflow:hidden;
+    font-size:12.5px;
+  }
+  thead th{
+    text-align:left;
+    padding:11px 12px;
+    background: var(--panel-2);
+    color:var(--muted);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    border-bottom:1px solid var(--line);
+    cursor:pointer;
+    white-space:nowrap;
+    user-select:none;
+  }
+  thead th:hover{ color:var(--text); }
+  thead th .arrow{ opacity:0.5; margin-left:4px; }
+  tbody td{
+    padding:9px 12px;
+    border-bottom:1px solid var(--line);
+    white-space:nowrap;
+  }
+  tbody tr:hover{ background: rgba(255,255,255,0.02); }
+  tbody tr:last-child td{ border-bottom:none; }
+  .pkg-tag{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    padding:2px 7px;
+    border-radius:3px;
+    font-weight:600;
+  }
+  .pkg-tag.pk1{ background: rgba(79,163,209,0.15); color: var(--pk1); }
+  .pkg-tag.pk2{ background: rgba(242,165,65,0.15); color: var(--pk2); }
+  .mini-bar{ display:flex; align-items:center; gap:8px; }
+  .mini-track{ width:60px; height:6px; background:var(--panel-2); border-radius:3px; overflow:hidden; border:1px solid var(--line); }
+  .mini-fill{ height:100%; border-radius:3px; }
+  .num{ font-family:'IBM Plex Mono', monospace; text-align:right; }
+
+  .table-wrap{ overflow-x:auto; }
+
+  footer{
+    text-align:center; color:var(--muted); font-size:11.5px;
+    padding: 24px 0 10px; font-family:'IBM Plex Mono', monospace;
+  }
+  .center-msg{ text-align:center; padding: 60px 20px; color:var(--muted); }
+  .refresh-btn{
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    padding:9px 14px; border-radius:var(--radius); font-size:12.5px; cursor:pointer;
+    font-family:'IBM Plex Mono', monospace;
+  }
+  .refresh-btn:hover{ border-color: var(--steel); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="brand-eyebrow">RIYAS · NGL Fractionation Facilities</div>
+    <h1>Fabrication Status — PKG&nbsp;1 / PKG&nbsp;2</h1>
+    <div class="subtitle">Peso emitido, fabricado y entregado por estructura de acero — datos en vivo desde Supabase</div>
+  </div>
+  <div style="display:flex; align-items:center; gap:10px;">
+    <div class="status-pill"><span class="dot loading" id="statusDot"></span><span id="statusText">Conectando…</span></div>
+    <button class="refresh-btn" id="refreshBtn">↻ Actualizar</button>
+  </div>
+</header>
+
+<main id="app">
+  <div class="center-msg" id="loadingMsg">Cargando datos de fabricación…</div>
+</main>
+
+<footer>Fuente: tabla <span class="mono">structures</span> en Supabase (Postgres) · Actualizado en cada carga de página</footer>
+
+<script>
+const SUPABASE_URL = 'https://cuvhvwsvylofgjpwwwzg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN1dmh2d3N2eWxvZmdqcHd3d3pnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxMTE2NDYsImV4cCI6MjA5OTY4NzY0Nn0._YzMXG01-IBlayvGlOTyxWHx2oDfG2FqXgBr_UCEUJk';
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let allRows = [];
+let sortKey = 'job_ref';
+let sortDir = 1;
+
+const fmtWeight = (v) => v === null || v === undefined ? '—' : Number(v).toLocaleString('en-US',{maximumFractionDigits:1}) + ' kg';
+const fmtPct = (v) => v === null || v === undefined ? '—' : (Number(v)*100).toFixed(1) + '%';
+const fmtDate = (v) => v ? v : '—';
+
+function setStatus(state, text){
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  dot.className = 'dot' + (state==='error' ? ' err' : state==='loading' ? ' loading' : '');
+  txt.textContent = text;
+}
+
+async function loadData(){
+  setStatus('loading', 'Consultando Supabase…');
+  document.getElementById('refreshBtn').disabled = true;
+  try{
+    const { data, error } = await sb
+      .from('structures')
+      .select('*')
+      .order('job_ref', { ascending: true });
+
+    if (error) throw error;
+
+    allRows = data || [];
+    setStatus('ok', `Conectado · ${allRows.length} estructuras`);
+    render();
+  } catch(err){
+    setStatus('error', 'Error de conexión');
+    document.getElementById('app').innerHTML = `<div class="center-msg">No se pudieron cargar los datos desde Supabase.<br><span class="mono" style="color:var(--red)">${(err && err.message) ? err.message : err}</span></div>`;
+  } finally {
+    document.getElementById('refreshBtn').disabled = false;
+  }
+}
+
+function summarize(rows){
+  const sum = (arr,k) => arr.reduce((a,r)=> a + (Number(r[k]) || 0), 0);
+  const totalIssued = sum(rows,'total_issued_weight');
+  const totalFab = sum(rows,'total_fab_weight');
+  const totalDelivered = sum(rows,'total_delivered_weight');
+  const fabPct = totalIssued ? totalFab/totalIssued : 0;
+  const delPct = totalIssued ? totalDelivered/totalIssued : 0;
+  return { count: rows.length, totalIssued, totalFab, totalDelivered, fabPct, delPct };
+}
+
+function render(){
+  const all = summarize(allRows);
+  const pk1 = summarize(allRows.filter(r=>r.package==='PK1'));
+  const pk2 = summarize(allRows.filter(r=>r.package==='PK2'));
+
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="kpi-row">
+      <div class="kpi" style="--accent: var(--steel)">
+        <div class="kpi-label">Estructuras totales</div>
+        <div class="kpi-value mono">${all.count}</div>
+        <div class="kpi-sub">PK1: ${pk1.count} · PK2: ${pk2.count}</div>
+      </div>
+      <div class="kpi" style="--accent: var(--muted)">
+        <div class="kpi-label">Peso emitido</div>
+        <div class="kpi-value mono">${(all.totalIssued/1000).toLocaleString('en-US',{maximumFractionDigits:1})} t</div>
+        <div class="kpi-sub">${fmtWeight(all.totalIssued)}</div>
+      </div>
+      <div class="kpi" style="--accent: var(--amber)">
+        <div class="kpi-label">Fabricado</div>
+        <div class="kpi-value mono">${fmtPct(all.fabPct)}</div>
+        <div class="kpi-sub">${(all.totalFab/1000).toLocaleString('en-US',{maximumFractionDigits:1})} t de ${(all.totalIssued/1000).toLocaleString('en-US',{maximumFractionDigits:1})} t</div>
+      </div>
+      <div class="kpi" style="--accent: var(--green)">
+        <div class="kpi-label">Entregado</div>
+        <div class="kpi-value mono">${fmtPct(all.delPct)}</div>
+        <div class="kpi-sub">${(all.totalDelivered/1000).toLocaleString('en-US',{maximumFractionDigits:1})} t de ${(all.totalIssued/1000).toLocaleString('en-US',{maximumFractionDigits:1})} t</div>
+      </div>
+    </div>
+
+    <div class="packages">
+      ${packageCard('PK1', pk1)}
+      ${packageCard('PK2', pk2)}
+    </div>
+
+    <div class="toolbar">
+      <input type="text" id="searchInput" placeholder="Buscar por descripción, short name, job ref…">
+      <select id="pkgFilter">
+        <option value="">Todos los paquetes</option>
+        <option value="PK1">PK1</option>
+        <option value="PK2">PK2</option>
+      </select>
+      <span class="count" id="rowCount"></span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            ${th('job_ref','Job Ref')}
+            ${th('package','Pkg')}
+            ${th('structure_description','Descripción')}
+            ${th('short_name','Short Name')}
+            ${th('bolt_type','Bolt')}
+            ${th('total_issued_weight','Emitido','num')}
+            ${th('total_fab_weight','Fabricado','num')}
+            ${th('fab_percent','Fab %','num')}
+            ${th('total_delivered_weight','Entregado','num')}
+            ${th('delivery_percent','Entrega %','num')}
+            ${th('delivery_finish_date_planned','Entrega Plan.')}
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  `;
+
+  document.getElementById('searchInput').addEventListener('input', renderTable);
+  document.getElementById('pkgFilter').addEventListener('change', renderTable);
+  document.querySelectorAll('thead th').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.key;
+      if (!key) return;
+      if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
+      renderTable();
+    });
+  });
+
+  renderTable();
+}
+
+function packageCard(name, s){
+  const cls = name === 'PK1' ? 'pk1' : 'pk2';
+  const color = name === 'PK1' ? 'var(--pk1)' : 'var(--pk2)';
+  return `
+    <div class="pkg-card">
+      <div class="pkg-head">
+        <div class="pkg-title"><span class="pkg-swatch" style="background:${color}"></span>${name}</div>
+        <div class="pkg-count">${s.count} estructuras</div>
+      </div>
+      <div class="bar-block">
+        <div class="bar-label"><span>Fabricación</span><span>${fmtPct(s.fabPct)}</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(s.fabPct*100).toFixed(1)}%; background:${color}"></div></div>
+      </div>
+      <div class="bar-block">
+        <div class="bar-label"><span>Entrega</span><span>${fmtPct(s.delPct)}</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(s.delPct*100).toFixed(1)}%; background: var(--green)"></div></div>
+      </div>
+    </div>
+  `;
+}
+
+function th(key, label, extraClass=''){
+  const arrow = sortKey === key ? (sortDir === 1 ? '↑' : '↓') : '';
+  return `<th data-key="${key}" class="${extraClass}">${label}<span class="arrow">${arrow}</span></th>`;
+}
+
+function renderTable(){
+  const search = (document.getElementById('searchInput').value || '').toLowerCase();
+  const pkgFilter = document.getElementById('pkgFilter').value;
+
+  let rows = allRows.filter(r=>{
+    if (pkgFilter && r.package !== pkgFilter) return false;
+    if (!search) return true;
+    const hay = [r.structure_description, r.short_name, r.job_ref, r.bolt_type].join(' ').toLowerCase();
+    return hay.includes(search);
+  });
+
+  rows = rows.slice().sort((a,b)=>{
+    let av = a[sortKey], bv = b[sortKey];
+    if (av === null || av === undefined) av = '';
+    if (bv === null || bv === undefined) bv = '';
+    if (typeof av === 'number' || typeof bv === 'number'){
+      return (Number(av)||0) > (Number(bv)||0) ? sortDir : (Number(av)||0) < (Number(bv)||0) ? -sortDir : 0;
+    }
+    return String(av).localeCompare(String(bv)) * sortDir;
+  });
+
+  document.getElementById('rowCount').textContent = `${rows.length} de ${allRows.length} estructuras`;
+
+  document.getElementById('tbody').innerHTML = rows.map(r => `
+    <tr>
+      <td class="mono">${r.job_ref || '—'}</td>
+      <td><span class="pkg-tag ${r.package==='PK1'?'pk1':'pk2'}">${r.package}</span></td>
+      <td>${r.structure_description || '—'}</td>
+      <td class="mono">${r.short_name || '—'}</td>
+      <td>${r.bolt_type || '—'}</td>
+      <td class="num">${fmtWeight(r.total_issued_weight)}</td>
+      <td class="num">${fmtWeight(r.total_fab_weight)}</td>
+      <td class="num">
+        <div class="mini-bar" style="justify-content:flex-end;">
+          <span>${fmtPct(r.fab_percent)}</span>
+          <div class="mini-track"><div class="mini-fill" style="width:${(Number(r.fab_percent||0)*100).toFixed(0)}%; background:var(--amber)"></div></div>
+        </div>
+      </td>
+      <td class="num">${fmtWeight(r.total_delivered_weight)}</td>
+      <td class="num">
+        <div class="mini-bar" style="justify-content:flex-end;">
+          <span>${fmtPct(r.delivery_percent)}</span>
+          <div class="mini-track"><div class="mini-fill" style="width:${(Number(r.delivery_percent||0)*100).toFixed(0)}%; background:var(--green)"></div></div>
+        </div>
+      </td>
+      <td class="mono">${fmtDate(r.delivery_finish_date_planned)}</td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('refreshBtn').addEventListener('click', loadData);
+loadData();
+</script>
+
+</body>
+</html>
