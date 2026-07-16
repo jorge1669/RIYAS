@@ -6,6 +6,7 @@
 <title>RIYAS NGL Fractionation — Fabrication Status</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
     --bg: #0d1117;
@@ -218,45 +219,214 @@
     padding: 24px 0 10px; font-family:'IBM Plex Mono', monospace;
   }
   .center-msg{ text-align:center; padding: 60px 20px; color:var(--muted); }
-  .refresh-btn{
+  .btn{
     background:var(--panel-2); border:1px solid var(--line); color:var(--text);
     padding:9px 14px; border-radius:var(--radius); font-size:12.5px; cursor:pointer;
     font-family:'IBM Plex Mono', monospace;
   }
-  .refresh-btn:hover{ border-color: var(--steel); }
+  .btn:hover{ border-color: var(--steel); }
+  .btn:disabled{ opacity:0.5; cursor:not-allowed; }
+  .btn.primary{ background: var(--steel); border-color: var(--steel); color:#0a1520; font-weight:600; }
+  .btn.primary:hover{ filter:brightness(1.08); }
+
+  /* Login screen */
+  .login-wrap{
+    min-height:100vh;
+    display:flex; align-items:center; justify-content:center;
+    padding:20px;
+  }
+  .login-card{
+    width:100%; max-width:380px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius: var(--radius);
+    padding:32px 28px;
+  }
+  .login-card h1{ font-size:20px; margin-bottom:4px; }
+  .login-card .subtitle{ margin-bottom:24px; }
+  .field{ margin-bottom:14px; }
+  .field label{
+    display:block; font-size:11px; color:var(--muted);
+    font-family:'IBM Plex Mono', monospace; letter-spacing:0.06em;
+    text-transform:uppercase; margin-bottom:6px;
+  }
+  .field input{
+    width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    padding:10px 12px; border-radius:var(--radius); font-size:14px; font-family:'Inter',sans-serif;
+  }
+  .field input:focus{ outline:none; border-color:var(--steel); }
+  .login-error{
+    color:var(--red); font-size:12.5px; margin-bottom:14px; min-height:1em;
+    font-family:'IBM Plex Mono', monospace;
+  }
+  .login-card .btn.primary{ width:100%; padding:11px; font-size:13px; }
+
+  .hidden{ display:none !important; }
+
+  .import-status{
+    font-size:12px; color:var(--muted); font-family:'IBM Plex Mono', monospace;
+    margin-left:8px;
+  }
+  .import-status.err{ color:var(--red); }
+  .import-status.ok{ color:var(--green); }
 </style>
 </head>
 <body>
 
-<header>
-  <div>
+<!-- LOGIN VIEW -->
+<div id="loginView" class="login-wrap">
+  <div class="login-card">
     <div class="brand-eyebrow">RIYAS · NGL Fractionation Facilities</div>
-    <h1>Fabrication Status — PKG&nbsp;1 / PKG&nbsp;2</h1>
-    <div class="subtitle">Peso emitido, fabricado y entregado por estructura de acero — datos en vivo desde Supabase</div>
+    <h1>Fabrication Status</h1>
+    <div class="subtitle">Acceso restringido — inicia sesión para continuar</div>
+    <div class="login-error" id="loginError"></div>
+    <form id="loginForm">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="loginEmail" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label>Contraseña</label>
+        <input type="password" id="loginPassword" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn primary" id="loginBtn">Iniciar sesión</button>
+    </form>
   </div>
-  <div style="display:flex; align-items:center; gap:10px;">
-    <div class="status-pill"><span class="dot loading" id="statusDot"></span><span id="statusText">Conectando…</span></div>
-    <button class="refresh-btn" id="refreshBtn">↻ Actualizar</button>
-  </div>
-</header>
+</div>
 
-<main id="app">
-  <div class="center-msg" id="loadingMsg">Cargando datos de fabricación…</div>
-</main>
+<!-- DASHBOARD VIEW -->
+<div id="dashboardView" class="hidden">
+  <header>
+    <div>
+      <div class="brand-eyebrow">RIYAS · NGL Fractionation Facilities</div>
+      <h1>Fabrication Status — PKG&nbsp;1 / PKG&nbsp;2</h1>
+      <div class="subtitle">Peso emitido, fabricado y entregado por estructura de acero — datos en vivo desde Supabase</div>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <div class="status-pill"><span class="dot loading" id="statusDot"></span><span id="statusText">Conectando…</span></div>
+      <input type="file" id="excelInput" accept=".xlsx,.xls" class="hidden">
+      <button class="btn" id="importBtn">⤒ Importar Excel</button>
+      <span class="import-status" id="importStatus"></span>
+      <button class="btn" id="refreshBtn">↻ Actualizar</button>
+      <button class="btn" id="logoutBtn">Cerrar sesión</button>
+    </div>
+  </header>
 
-<footer>Fuente: tabla <span class="mono">structures</span> en Supabase (Postgres) · Actualizado en cada carga de página</footer>
+  <main id="app">
+    <div class="center-msg" id="loadingMsg">Cargando datos de fabricación…</div>
+  </main>
+
+  <footer>Fuente: tabla <span class="mono">structures</span> en Supabase (Postgres) · Acceso protegido con Supabase Auth</footer>
+</div>
 
 <script>
 const SUPABASE_URL = 'https://cuvhvwsvylofgjpwwwzg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN1dmh2d3N2eWxvZmdqcHd3d3pnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxMTE2NDYsImV4cCI6MjA5OTY4NzY0Nn0._YzMXG01-IBlayvGlOTyxWHx2oDfG2FqXgBr_UCEUJk';
+const SESSION_KEY = 'riyas_dashboard_session';
 
 let allRows = [];
 let sortKey = 'job_ref';
 let sortDir = 1;
+let session = null;
 
 const fmtWeight = (v) => v === null || v === undefined ? '—' : Number(v).toLocaleString('en-US',{maximumFractionDigits:1}) + ' kg';
 const fmtPct = (v) => v === null || v === undefined ? '—' : (Number(v)*100).toFixed(1) + '%';
 const fmtDate = (v) => v ? v : '—';
+
+/* ---------------- AUTH ---------------- */
+
+function saveSession(s){
+  session = s;
+  localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+}
+function clearSession(){
+  session = null;
+  localStorage.removeItem(SESSION_KEY);
+}
+function loadSession(){
+  try{
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch(e){ return null; }
+}
+
+async function login(email, password){
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ email, password })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error_description || data.msg || 'Credenciales incorrectas');
+  const expiresAt = Date.now() + (data.expires_in * 1000);
+  saveSession({ access_token: data.access_token, refresh_token: data.refresh_token, expires_at: expiresAt, email });
+  return session;
+}
+
+async function refreshSession(){
+  if (!session || !session.refresh_token) return false;
+  try{
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: session.refresh_token })
+    });
+    const data = await res.json();
+    if (!res.ok) return false;
+    const expiresAt = Date.now() + (data.expires_in * 1000);
+    saveSession({ access_token: data.access_token, refresh_token: data.refresh_token, expires_at: expiresAt, email: session.email });
+    return true;
+  } catch(e){ return false; }
+}
+
+async function ensureValidSession(){
+  if (!session) return false;
+  if (Date.now() > session.expires_at - 30000){
+    return await refreshSession();
+  }
+  return true;
+}
+
+function showLogin(){
+  document.getElementById('loginView').classList.remove('hidden');
+  document.getElementById('dashboardView').classList.add('hidden');
+}
+function showDashboard(){
+  document.getElementById('loginView').classList.add('hidden');
+  document.getElementById('dashboardView').classList.remove('hidden');
+}
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errBox = document.getElementById('loginError');
+  const btn = document.getElementById('loginBtn');
+  errBox.textContent = '';
+  btn.disabled = true;
+  btn.textContent = 'Verificando…';
+  try{
+    await login(email, password);
+    showDashboard();
+    loadData();
+  } catch(err){
+    errBox.textContent = err.message || 'No se pudo iniciar sesión';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Iniciar sesión';
+  }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', () => {
+  clearSession();
+  showLogin();
+});
+
+/* ---------------- DATA LOADING ---------------- */
 
 function setStatus(state, text){
   const dot = document.getElementById('statusDot');
@@ -268,17 +438,20 @@ function setStatus(state, text){
 async function loadData(){
   setStatus('loading', 'Consultando Supabase…');
   document.getElementById('refreshBtn').disabled = true;
+  const ok = await ensureValidSession();
+  if (!ok){ clearSession(); showLogin(); return; }
   try{
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/structures?select=*&order=job_ref.asc`,
       {
         headers: {
           'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+          'Authorization': `Bearer ${session.access_token}`
         }
       }
     );
 
+    if (res.status === 401){ clearSession(); showLogin(); return; }
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
 
     allRows = await res.json();
@@ -291,6 +464,127 @@ async function loadData(){
     document.getElementById('refreshBtn').disabled = false;
   }
 }
+
+/* ---------------- EXCEL IMPORT ---------------- */
+
+const COLS = [
+  'package','structure_description','bolt_type','short_name','approved_by_jv','job_ref',
+  'total_issued_weight','total_fab_weight','remaining_fabrication','total_galvanized_weight',
+  'total_painted_weight','total_delivered_weight','remaining_dispatch','fab_percent',
+  'galva_percent','paint_percent','delivery_percent',
+  null, // duplicate empty column in the template, skipped
+  'shop_drawing_received_date','delivery_start_date_planned','delivery_start_date',
+  'delivery_finish_date_planned','delivery_finish_date'
+];
+
+function excelDateToISO(v){
+  if (v === null || v === undefined || v === '') return null;
+  if (v instanceof Date && !isNaN(v)) return v.toISOString().slice(0,10);
+  if (typeof v === 'number'){
+    const d = XLSX.SSF.parse_date_code(v);
+    if (!d) return null;
+    const pad = (n)=> String(n).padStart(2,'0');
+    return `${d.y}-${pad(d.m)}-${pad(d.d)}`;
+  }
+  return null;
+}
+
+function cleanNum(v){
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'string'){
+    if (v.trim().startsWith('#')) return null;
+    const n = parseFloat(v);
+    return isNaN(n) ? null : n;
+  }
+  if (typeof v === 'number') return v;
+  return null;
+}
+
+function cleanTxt(v){
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  if (s === '' || s.startsWith('#')) return null;
+  return s;
+}
+
+async function parseExcelFile(file){
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+  let sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('fabrication'));
+  if (!sheetName) sheetName = wb.SheetNames[0];
+  const sheet = wb.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
+
+  // Data starts at row index 4 (5th row), matching the known template layout
+  const dataRows = rows.slice(4);
+  const parsed = [];
+
+  for (const r of dataRows){
+    if (!r || r[0] === null || r[0] === undefined || String(r[0]).trim() === '') continue;
+    const obj = {};
+    COLS.forEach((colName, idx) => {
+      if (!colName) return;
+      const raw = r[idx];
+      if (colName.includes('date')){
+        obj[colName] = excelDateToISO(raw);
+      } else if (colName === 'package' || colName === 'structure_description' || colName === 'bolt_type' ||
+                 colName === 'short_name' || colName === 'approved_by_jv' || colName === 'job_ref'){
+        obj[colName] = cleanTxt(raw);
+      } else {
+        obj[colName] = cleanNum(raw);
+      }
+    });
+    if (obj.package && obj.job_ref) parsed.push(obj);
+  }
+  return parsed;
+}
+
+async function upsertRows(rows){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/structures?on_conflict=job_ref`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates,return=representation'
+    },
+    body: JSON.stringify(rows)
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+  return await res.json();
+}
+
+document.getElementById('importBtn').addEventListener('click', () => {
+  document.getElementById('excelInput').click();
+});
+
+document.getElementById('excelInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('importStatus');
+  statusEl.className = 'import-status';
+  statusEl.textContent = 'Leyendo archivo…';
+
+  const ok = await ensureValidSession();
+  if (!ok){ clearSession(); showLogin(); return; }
+
+  try{
+    const rows = await parseExcelFile(file);
+    if (rows.length === 0) throw new Error('No se encontraron filas válidas en el archivo');
+    statusEl.textContent = `Subiendo ${rows.length} filas…`;
+    await upsertRows(rows);
+    statusEl.className = 'import-status ok';
+    statusEl.textContent = `✓ ${rows.length} filas actualizadas`;
+    await loadData();
+  } catch(err){
+    statusEl.className = 'import-status err';
+    statusEl.textContent = `Error: ${err.message || err}`;
+  } finally {
+    e.target.value = '';
+  }
+});
+
+/* ---------------- RENDER ---------------- */
 
 function summarize(rows){
   const sum = (arr,k) => arr.reduce((a,r)=> a + (Number(r[k]) || 0), 0);
@@ -371,9 +665,9 @@ function render(){
 
   document.getElementById('searchInput').addEventListener('input', renderTable);
   document.getElementById('pkgFilter').addEventListener('change', renderTable);
-  document.querySelectorAll('thead th').forEach(th => {
-    th.addEventListener('click', () => {
-      const key = th.dataset.key;
+  document.querySelectorAll('thead th').forEach(thEl => {
+    thEl.addEventListener('click', () => {
+      const key = thEl.dataset.key;
       if (!key) return;
       if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
       renderTable();
@@ -384,7 +678,6 @@ function render(){
 }
 
 function packageCard(name, s){
-  const cls = name === 'PK1' ? 'pk1' : 'pk2';
   const color = name === 'PK1' ? 'var(--pk1)' : 'var(--pk2)';
   return `
     <div class="pkg-card">
@@ -460,7 +753,18 @@ function renderTable(){
 }
 
 document.getElementById('refreshBtn').addEventListener('click', loadData);
-loadData();
+
+/* ---------------- INIT ---------------- */
+
+(function init(){
+  session = loadSession();
+  if (session){
+    showDashboard();
+    loadData();
+  } else {
+    showLogin();
+  }
+})();
 </script>
 
 </body>
