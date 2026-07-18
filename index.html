@@ -19,6 +19,7 @@
     --amber: #f2a541;
     --green: #3ecf8e;
     --red: #e05353;
+    --purple: #a78bfa;
     --pk1: #4fa3d1;
     --pk2: #f2a541;
     --radius: 6px;
@@ -74,13 +75,29 @@
   .dot.loading{ background: var(--amber); box-shadow:0 0 8px var(--amber); animation: pulse 1.2s infinite; }
   @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.3;} }
 
-  main{ padding: 28px 32px 60px; max-width:1440px; margin:0 auto; }
+  main{ padding: 24px 32px 60px; max-width:1520px; margin:0 auto; }
+
+  /* Tabs */
+  .tabs{
+    display:flex; gap:4px; margin-bottom:22px;
+    border-bottom:1px solid var(--line);
+  }
+  .tab-btn{
+    background:none; border:none; color:var(--muted);
+    font-family:'IBM Plex Mono', monospace; font-size:12.5px; letter-spacing:0.04em;
+    text-transform:uppercase; padding:11px 18px; cursor:pointer;
+    border-bottom:2px solid transparent; margin-bottom:-1px;
+  }
+  .tab-btn:hover{ color:var(--text); }
+  .tab-btn.active{ color:var(--steel); border-bottom-color:var(--steel); }
+  .tab-panel{ display:none; }
+  .tab-panel.active{ display:block; }
 
   .kpi-row{
     display:grid;
     grid-template-columns: repeat(auto-fit, minmax(190px,1fr));
     gap:14px;
-    margin-bottom: 28px;
+    margin-bottom: 24px;
   }
   .kpi{
     background: var(--panel);
@@ -115,7 +132,7 @@
     display:grid;
     grid-template-columns: 1fr 1fr;
     gap:16px;
-    margin-bottom: 28px;
+    margin-bottom: 24px;
   }
   @media (max-width: 760px){ .packages{ grid-template-columns:1fr; } }
 
@@ -213,6 +230,49 @@
   .num{ font-family:'IBM Plex Mono', monospace; text-align:right; }
 
   .table-wrap{ overflow-x:auto; }
+
+  .struct-name{
+    cursor:help;
+    border-bottom: 1px dotted var(--muted);
+  }
+
+  /* Tooltip */
+  #tooltip{
+    position:fixed;
+    z-index:1000;
+    background: var(--panel-2);
+    border:1px solid var(--steel);
+    border-radius: var(--radius);
+    padding:12px 14px;
+    font-size:12px;
+    max-width:280px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    pointer-events:none;
+    display:none;
+  }
+  #tooltip .tt-title{
+    font-family:'Oswald', sans-serif; font-size:13.5px; margin-bottom:8px;
+    color: var(--steel); text-transform:uppercase; letter-spacing:0.02em;
+  }
+  #tooltip .tt-row{
+    display:flex; justify-content:space-between; gap:14px;
+    font-family:'IBM Plex Mono', monospace; font-size:11px;
+    color:var(--muted); padding:2px 0;
+  }
+  #tooltip .tt-row span:last-child{ color:var(--text); }
+
+  /* Breakdown bars (stacked) */
+  .stack-bar{
+    display:flex; height:16px; border-radius:4px; overflow:hidden;
+    border:1px solid var(--line); min-width:140px;
+  }
+  .stack-seg{ height:100%; }
+  .legend{
+    display:flex; gap:14px; flex-wrap:wrap; margin-bottom:16px;
+    font-size:11.5px; font-family:'IBM Plex Mono', monospace; color:var(--muted);
+  }
+  .legend span{ display:flex; align-items:center; gap:6px; }
+  .legend .sw{ width:10px; height:10px; border-radius:2px; display:inline-block; }
 
   footer{
     text-align:center; color:var(--muted); font-size:11.5px;
@@ -313,11 +373,21 @@
   </header>
 
   <main id="app">
-    <div class="center-msg" id="loadingMsg">Cargando datos de fabricación…</div>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="overview">Resumen</button>
+      <button class="tab-btn" data-tab="breakdown">Desglose por Estructura</button>
+    </div>
+
+    <div id="overviewTab" class="tab-panel active">
+      <div class="center-msg" id="loadingMsg">Cargando datos de fabricación…</div>
+    </div>
+    <div id="breakdownTab" class="tab-panel"></div>
   </main>
 
-  <footer>Fuente: tabla <span class="mono">structures</span> en Supabase (Postgres) · Acceso protegido con Supabase Auth</footer>
+  <footer>Fuente: tablas <span class="mono">structures</span> y <span class="mono">weight_breakdown</span> en Supabase (Postgres) · Acceso protegido con Supabase Auth</footer>
 </div>
+
+<div id="tooltip"></div>
 
 <script>
 const SUPABASE_URL = 'https://cuvhvwsvylofgjpwwwzg.supabase.co';
@@ -325,8 +395,11 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const SESSION_KEY = 'riyas_dashboard_session';
 
 let allRows = [];
+let breakdownRows = [];
 let sortKey = 'job_ref';
 let sortDir = 1;
+let bdSortKey = 'total_weight';
+let bdSortDir = -1;
 let session = null;
 
 const fmtWeight = (v) => v === null || v === undefined ? '—' : Number(v).toLocaleString('en-US',{maximumFractionDigits:1}) + ' kg';
@@ -426,6 +499,17 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
   showLogin();
 });
 
+/* ---------------- TABS ---------------- */
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab + 'Tab').classList.add('active');
+  });
+});
+
 /* ---------------- DATA LOADING ---------------- */
 
 function setStatus(state, text){
@@ -441,25 +525,27 @@ async function loadData(){
   const ok = await ensureValidSession();
   if (!ok){ clearSession(); showLogin(); return; }
   try{
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/structures?select=*&order=job_ref.asc`,
-      {
-        headers: {
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${session.access_token}`
-        }
-      }
-    );
+    const [structRes, breakdownRes] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/structures?select=*&order=job_ref.asc`, {
+        headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+      }),
+      fetch(`${SUPABASE_URL}/rest/v1/weight_breakdown?select=*&order=job_ref.asc`, {
+        headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+      })
+    ]);
 
-    if (res.status === 401){ clearSession(); showLogin(); return; }
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    if (structRes.status === 401 || breakdownRes.status === 401){ clearSession(); showLogin(); return; }
+    if (!structRes.ok) throw new Error(`HTTP ${structRes.status}: ${await structRes.text()}`);
+    if (!breakdownRes.ok) throw new Error(`HTTP ${breakdownRes.status}: ${await breakdownRes.text()}`);
 
-    allRows = await res.json();
+    allRows = await structRes.json();
+    breakdownRows = await breakdownRes.json();
     setStatus('ok', `Conectado · ${allRows.length} estructuras`);
-    render();
+    renderOverview();
+    renderBreakdown();
   } catch(err){
     setStatus('error', 'Error de conexión');
-    document.getElementById('app').innerHTML = `<div class="center-msg">No se pudieron cargar los datos desde Supabase.<br><span class="mono" style="color:var(--red)">${(err && err.message) ? err.message : err}</span></div>`;
+    document.getElementById('overviewTab').innerHTML = `<div class="center-msg">No se pudieron cargar los datos desde Supabase.<br><span class="mono" style="color:var(--red)">${(err && err.message) ? err.message : err}</span></div>`;
   } finally {
     document.getElementById('refreshBtn').disabled = false;
   }
@@ -467,14 +553,20 @@ async function loadData(){
 
 /* ---------------- EXCEL IMPORT ---------------- */
 
-const COLS = [
+const FAB_COLS = [
   'package','structure_description','bolt_type','short_name','approved_by_jv','job_ref',
   'total_issued_weight','total_fab_weight','remaining_fabrication','total_galvanized_weight',
   'total_painted_weight','total_delivered_weight','remaining_dispatch','fab_percent',
   'galva_percent','paint_percent','delivery_percent',
-  null, // duplicate empty column in the template, skipped
+  null,
   'shop_drawing_received_date','delivery_start_date_planned','delivery_start_date',
   'delivery_finish_date_planned','delivery_finish_date'
+];
+
+const WD_COLS = [
+  null, 'title', 'short_name', 'package', 'reference_drawing', 'job_ref',
+  'handrail_weight','ladder_weight','grating_weight','tread_weight','chq_plate_weight',
+  'main_steel_weight','total_weight'
 ];
 
 function excelDateToISO(v){
@@ -507,40 +599,49 @@ function cleanTxt(v){
   return s;
 }
 
-async function parseExcelFile(file){
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-  let sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('fabrication'));
-  if (!sheetName) sheetName = wb.SheetNames[0];
-  const sheet = wb.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
+const DATE_FIELDS = new Set(['shop_drawing_received_date','delivery_start_date_planned','delivery_start_date','delivery_finish_date_planned','delivery_finish_date']);
+const TXT_FIELDS = new Set(['package','structure_description','bolt_type','short_name','approved_by_jv','job_ref','title','reference_drawing']);
 
-  // Data starts at row index 4 (5th row), matching the known template layout
-  const dataRows = rows.slice(4);
+function parseSheetRows(rows, cols, startIdx){
+  const dataRows = rows.slice(startIdx);
   const parsed = [];
-
   for (const r of dataRows){
-    if (!r || r[0] === null || r[0] === undefined || String(r[0]).trim() === '') continue;
+    if (!r || r[0] === null || r[0] === undefined || String(r[0]).trim() === '') {
+      // some sheets key off a later column (job_ref), so don't bail purely on col 0
+    }
     const obj = {};
-    COLS.forEach((colName, idx) => {
+    cols.forEach((colName, idx) => {
       if (!colName) return;
-      const raw = r[idx];
-      if (colName.includes('date')){
-        obj[colName] = excelDateToISO(raw);
-      } else if (colName === 'package' || colName === 'structure_description' || colName === 'bolt_type' ||
-                 colName === 'short_name' || colName === 'approved_by_jv' || colName === 'job_ref'){
-        obj[colName] = cleanTxt(raw);
-      } else {
-        obj[colName] = cleanNum(raw);
-      }
+      const raw = r ? r[idx] : null;
+      if (DATE_FIELDS.has(colName)) obj[colName] = excelDateToISO(raw);
+      else if (TXT_FIELDS.has(colName)) obj[colName] = cleanTxt(raw);
+      else obj[colName] = cleanNum(raw);
     });
-    if (obj.package && obj.job_ref) parsed.push(obj);
+    if (obj.job_ref) parsed.push(obj);
   }
   return parsed;
 }
 
-async function upsertRows(rows){
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/structures?on_conflict=job_ref`, {
+async function parseExcelFile(file){
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+
+  const fabSheetName = wb.SheetNames.find(n => n.toLowerCase().includes('fabrication')) || wb.SheetNames[0];
+  const fabRows = XLSX.utils.sheet_to_json(wb.Sheets[fabSheetName], { header: 1, raw: true, defval: null });
+  const fabParsed = parseSheetRows(fabRows, FAB_COLS, 4).filter(r => r.package && r.job_ref);
+
+  let wdParsed = [];
+  const wdSheetName = wb.SheetNames.find(n => n.toLowerCase().includes('weight') || n.toLowerCase().includes('dst'));
+  if (wdSheetName){
+    const wdRows = XLSX.utils.sheet_to_json(wb.Sheets[wdSheetName], { header: 1, raw: true, defval: null });
+    wdParsed = parseSheetRows(wdRows, WD_COLS, 3);
+  }
+
+  return { fabParsed, wdParsed };
+}
+
+async function upsertRows(table, rows, conflictCol){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${conflictCol}`, {
     method: 'POST',
     headers: {
       'apikey': SUPABASE_ANON_KEY,
@@ -569,12 +670,19 @@ document.getElementById('excelInput').addEventListener('change', async (e) => {
   if (!ok){ clearSession(); showLogin(); return; }
 
   try{
-    const rows = await parseExcelFile(file);
-    if (rows.length === 0) throw new Error('No se encontraron filas válidas en el archivo');
-    statusEl.textContent = `Subiendo ${rows.length} filas…`;
-    await upsertRows(rows);
+    const { fabParsed, wdParsed } = await parseExcelFile(file);
+    if (fabParsed.length === 0) throw new Error('No se encontraron filas válidas en "Fabrication Status"');
+
+    statusEl.textContent = `Subiendo ${fabParsed.length} filas de fabricación…`;
+    await upsertRows('structures', fabParsed, 'job_ref');
+
+    if (wdParsed.length > 0){
+      statusEl.textContent = `Subiendo ${wdParsed.length} filas de desglose…`;
+      await upsertRows('weight_breakdown', wdParsed, 'job_ref');
+    }
+
     statusEl.className = 'import-status ok';
-    statusEl.textContent = `✓ ${rows.length} filas actualizadas`;
+    statusEl.textContent = `✓ ${fabParsed.length} estructuras · ${wdParsed.length} desgloses actualizados`;
     await loadData();
   } catch(err){
     statusEl.className = 'import-status err';
@@ -584,7 +692,40 @@ document.getElementById('excelInput').addEventListener('change', async (e) => {
   }
 });
 
-/* ---------------- RENDER ---------------- */
+/* ---------------- TOOLTIP ---------------- */
+
+const tooltipEl = document.getElementById('tooltip');
+
+function showTooltip(evt, row){
+  tooltipEl.innerHTML = `
+    <div class="tt-title">${row.structure_description || row.short_name || row.job_ref}</div>
+    <div class="tt-row"><span>Job Ref</span><span>${row.job_ref || '—'}</span></div>
+    <div class="tt-row"><span>Shop Dwg. Recibido</span><span>${fmtDate(row.shop_drawing_received_date)}</span></div>
+    <div class="tt-row"><span>Entrega Inicio Plan.</span><span>${fmtDate(row.delivery_start_date_planned)}</span></div>
+    <div class="tt-row"><span>Entrega Inicio Real</span><span>${fmtDate(row.delivery_start_date)}</span></div>
+    <div class="tt-row"><span>Entrega Fin Plan.</span><span>${fmtDate(row.delivery_finish_date_planned)}</span></div>
+    <div class="tt-row"><span>Entrega Fin Real</span><span>${fmtDate(row.delivery_finish_date)}</span></div>
+  `;
+  positionTooltip(evt);
+  tooltipEl.style.display = 'block';
+}
+
+function positionTooltip(evt){
+  const offset = 16;
+  let x = evt.clientX + offset;
+  let y = evt.clientY + offset;
+  const rect = tooltipEl.getBoundingClientRect();
+  if (x + rect.width > window.innerWidth - 10) x = evt.clientX - rect.width - offset;
+  if (y + rect.height > window.innerHeight - 10) y = evt.clientY - rect.height - offset;
+  tooltipEl.style.left = x + 'px';
+  tooltipEl.style.top = y + 'px';
+}
+
+function hideTooltip(){
+  tooltipEl.style.display = 'none';
+}
+
+/* ---------------- OVERVIEW RENDER ---------------- */
 
 function summarize(rows){
   const sum = (arr,k) => arr.reduce((a,r)=> a + (Number(r[k]) || 0), 0);
@@ -596,12 +737,12 @@ function summarize(rows){
   return { count: rows.length, totalIssued, totalFab, totalDelivered, fabPct, delPct };
 }
 
-function render(){
+function renderOverview(){
   const all = summarize(allRows);
   const pk1 = summarize(allRows.filter(r=>r.package==='PK1'));
   const pk2 = summarize(allRows.filter(r=>r.package==='PK2'));
 
-  const app = document.getElementById('app');
+  const app = document.getElementById('overviewTab');
   app.innerHTML = `
     <div class="kpi-row">
       <div class="kpi" style="--accent: var(--steel)">
@@ -661,11 +802,14 @@ function render(){
         <tbody id="tbody"></tbody>
       </table>
     </div>
+    <div style="margin-top:10px; color:var(--muted); font-size:11.5px; font-family:'IBM Plex Mono', monospace;">
+      💡 Pasa el ratón sobre el nombre de una estructura para ver sus fechas clave.
+    </div>
   `;
 
   document.getElementById('searchInput').addEventListener('input', renderTable);
   document.getElementById('pkgFilter').addEventListener('change', renderTable);
-  document.querySelectorAll('thead th').forEach(thEl => {
+  document.querySelectorAll('#overviewTab thead th').forEach(thEl => {
     thEl.addEventListener('click', () => {
       const key = thEl.dataset.key;
       if (!key) return;
@@ -725,11 +869,12 @@ function renderTable(){
 
   document.getElementById('rowCount').textContent = `${rows.length} de ${allRows.length} estructuras`;
 
-  document.getElementById('tbody').innerHTML = rows.map(r => `
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = rows.map((r,i) => `
     <tr>
       <td class="mono">${r.job_ref || '—'}</td>
       <td><span class="pkg-tag ${r.package==='PK1'?'pk1':'pk2'}">${r.package}</span></td>
-      <td>${r.structure_description || '—'}</td>
+      <td><span class="struct-name" data-idx="${i}">${r.structure_description || '—'}</span></td>
       <td class="mono">${r.short_name || '—'}</td>
       <td>${r.bolt_type || '—'}</td>
       <td class="num">${fmtWeight(r.total_issued_weight)}</td>
@@ -750,6 +895,127 @@ function renderTable(){
       <td class="mono">${fmtDate(r.delivery_finish_date_planned)}</td>
     </tr>
   `).join('');
+
+  tbody.querySelectorAll('.struct-name').forEach(el => {
+    const idx = Number(el.dataset.idx);
+    const row = rows[idx];
+    el.addEventListener('mouseenter', (evt) => showTooltip(evt, row));
+    el.addEventListener('mousemove', positionTooltip);
+    el.addEventListener('mouseleave', hideTooltip);
+  });
+}
+
+/* ---------------- BREAKDOWN TAB ---------------- */
+
+const COMPONENT_COLORS = {
+  handrail_weight: 'var(--steel)',
+  ladder_weight: 'var(--amber)',
+  grating_weight: 'var(--green)',
+  tread_weight: 'var(--purple)',
+  chq_plate_weight: 'var(--red)',
+  main_steel_weight: '#5c6b7f'
+};
+const COMPONENT_LABELS = {
+  handrail_weight: 'Handrail',
+  ladder_weight: 'Ladder',
+  grating_weight: 'Grating',
+  tread_weight: 'Tread',
+  chq_plate_weight: 'Chq. Plate',
+  main_steel_weight: 'Main Steel'
+};
+
+function bdTh(key, label, extraClass=''){
+  const arrow = bdSortKey === key ? (bdSortDir === 1 ? '↑' : '↓') : '';
+  return `<th data-key="${key}" class="${extraClass}">${label}<span class="arrow">${arrow}</span></th>`;
+}
+
+function renderBreakdown(){
+  const panel = document.getElementById('breakdownTab');
+  panel.innerHTML = `
+    <div class="legend">
+      ${Object.keys(COMPONENT_LABELS).map(k => `<span><span class="sw" style="background:${COMPONENT_COLORS[k]}"></span>${COMPONENT_LABELS[k]}</span>`).join('')}
+    </div>
+    <div class="toolbar">
+      <input type="text" id="bdSearchInput" placeholder="Buscar por título, short name, job ref…">
+      <select id="bdPkgFilter">
+        <option value="">Todos los paquetes</option>
+        <option value="PK1">PK1</option>
+        <option value="PK2">PK2</option>
+      </select>
+      <span class="count" id="bdRowCount"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            ${bdTh('job_ref','Job Ref')}
+            ${bdTh('package','Pkg')}
+            ${bdTh('title','Título')}
+            ${bdTh('short_name','Short Name')}
+            <th>Desglose (kg)</th>
+            ${bdTh('total_weight','Total','num')}
+          </tr>
+        </thead>
+        <tbody id="bdTbody"></tbody>
+      </table>
+    </div>
+  `;
+
+  document.getElementById('bdSearchInput').addEventListener('input', renderBreakdownTable);
+  document.getElementById('bdPkgFilter').addEventListener('change', renderBreakdownTable);
+  document.querySelectorAll('#breakdownTab thead th').forEach(thEl => {
+    thEl.addEventListener('click', () => {
+      const key = thEl.dataset.key;
+      if (!key) return;
+      if (bdSortKey === key) bdSortDir *= -1; else { bdSortKey = key; bdSortDir = 1; }
+      renderBreakdownTable();
+    });
+  });
+
+  renderBreakdownTable();
+}
+
+function renderBreakdownTable(){
+  const search = (document.getElementById('bdSearchInput').value || '').toLowerCase();
+  const pkgFilter = document.getElementById('bdPkgFilter').value;
+
+  let rows = breakdownRows.filter(r=>{
+    if (pkgFilter && r.package !== pkgFilter) return false;
+    if (!search) return true;
+    const hay = [r.title, r.short_name, r.job_ref].join(' ').toLowerCase();
+    return hay.includes(search);
+  });
+
+  rows = rows.slice().sort((a,b)=>{
+    let av = a[bdSortKey], bv = b[bdSortKey];
+    if (av === null || av === undefined) av = '';
+    if (bv === null || bv === undefined) bv = '';
+    if (typeof av === 'number' || typeof bv === 'number'){
+      return (Number(av)||0) > (Number(bv)||0) ? bdSortDir : (Number(av)||0) < (Number(bv)||0) ? -bdSortDir : 0;
+    }
+    return String(av).localeCompare(String(bv)) * bdSortDir;
+  });
+
+  document.getElementById('bdRowCount').textContent = `${rows.length} de ${breakdownRows.length} estructuras`;
+
+  document.getElementById('bdTbody').innerHTML = rows.map(r => {
+    const total = Number(r.total_weight) || 0;
+    const segs = Object.keys(COMPONENT_LABELS).map(k => {
+      const val = Number(r[k]) || 0;
+      const pct = total > 0 ? (val/total*100) : 0;
+      return pct > 0 ? `<div class="stack-seg" style="width:${pct}%; background:${COMPONENT_COLORS[k]}" title="${COMPONENT_LABELS[k]}: ${fmtWeight(val)}"></div>` : '';
+    }).join('');
+    return `
+      <tr>
+        <td class="mono">${r.job_ref || '—'}</td>
+        <td><span class="pkg-tag ${r.package==='PK1'?'pk1':'pk2'}">${r.package || '—'}</span></td>
+        <td>${r.title || '—'}</td>
+        <td class="mono">${r.short_name || '—'}</td>
+        <td><div class="stack-bar">${segs}</div></td>
+        <td class="num">${fmtWeight(r.total_weight)}</td>
+      </tr>
+    `;
+  }).join('');
 }
 
 document.getElementById('refreshBtn').addEventListener('click', loadData);
