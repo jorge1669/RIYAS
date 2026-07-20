@@ -156,11 +156,12 @@
 
   .bar-block{ margin-bottom:12px; }
   .bar-label{
-    display:flex; justify-content:space-between;
+    display:flex; justify-content:space-between; flex-wrap:wrap; gap:4px 10px;
     font-size:11.5px; color:var(--muted);
     font-family:'IBM Plex Mono', monospace;
     margin-bottom:5px;
   }
+  .bar-label span:last-child{ text-align:right; }
   .bar-track{
     height:9px; background: var(--panel-2); border-radius:5px; overflow:hidden; border:1px solid var(--line);
   }
@@ -1000,11 +1001,11 @@ function packageCard(name, s){
         <div class="pkg-count">${s.count} estructuras</div>
       </div>
       <div class="bar-block">
-        <div class="bar-label"><span>Fabricación</span><span>${fmtPct(s.fabPct)}</span></div>
+        <div class="bar-label"><span>Fabricación</span><span>${fmtPct(s.fabPct)} · ${fmtWeight(s.totalFab)} / ${fmtWeight(s.totalIssued)}</span></div>
         <div class="bar-track"><div class="bar-fill" style="width:${(s.fabPct*100).toFixed(1)}%; background:${color}"></div></div>
       </div>
       <div class="bar-block">
-        <div class="bar-label"><span>Entrega</span><span>${fmtPct(s.delPct)}</span></div>
+        <div class="bar-label"><span>Entrega</span><span>${fmtPct(s.delPct)} · ${fmtWeight(s.totalDelivered)} / ${fmtWeight(s.totalIssued)}</span></div>
         <div class="bar-track"><div class="bar-fill" style="width:${(s.delPct*100).toFixed(1)}%; background: var(--green)"></div></div>
       </div>
     </div>
