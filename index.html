@@ -397,6 +397,18 @@
   .cron-item .dates .planned{ color:var(--muted); }
   .cron-item .dates .actual{ color:var(--green); }
   .cron-item .dates .missing{ color:var(--red); }
+
+  /* Gantt */
+  .gantt-wrap{ overflow-x:auto; }
+  .gantt-svg text{ font-family:'IBM Plex Mono', monospace; fill:var(--muted); }
+  .gantt-svg .row-label{ font-size:11px; fill:var(--text); text-anchor:end; }
+  .gantt-svg .axis-label{ font-size:10px; fill:var(--muted); }
+  .gantt-svg .grid-line{ stroke:var(--line); stroke-width:1; }
+  .gantt-svg .today-line{ stroke:var(--amber); stroke-width:1.5; stroke-dasharray:4,3; }
+  .gantt-legend{ display:flex; gap:16px; flex-wrap:wrap; margin-top:12px; font-size:11px; font-family:'IBM Plex Mono', monospace; color:var(--muted); }
+  .gantt-legend span{ display:flex; align-items:center; gap:6px; }
+  .gantt-legend .sw{ width:14px; height:8px; border-radius:2px; display:inline-block; }
+  .gantt-legend .sw.dot{ width:9px; height:9px; border-radius:50%; }
 </style>
 </head>
 <body>
@@ -428,7 +440,6 @@
     <div>
       <div class="brand-eyebrow">RIYAS · NGL Fractionation Facilities</div>
       <h1>Fabrication Status — PKG&nbsp;1 / PKG&nbsp;2</h1>
-      <div class="subtitle">Peso emitido, fabricado y entregado por estructura de acero — datos en vivo desde Supabase</div>
     </div>
     <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
       <div class="status-pill"><span class="dot loading" id="statusDot"></span><span id="statusText">Conectando…</span></div>
@@ -1240,23 +1251,129 @@ function renderCronogramaResults(){
   resultsEl.innerHTML = matches.map(r => `
     <div class="cron-search-result">
       <div class="cron-title">${r.structure || r.short_name || r.job_ref} <span class="mono" style="color:var(--muted); font-size:13px;">— ${r.job_ref}${r.package ? ' · '+r.package : ''}${r.short_name ? ' · '+r.short_name : ''}</span></div>
-      <div class="cron-grid">
-        ${MILESTONE_PAIRS.map(([pKey, aKey, label]) => {
-          const planned = r[pKey];
-          const actual = r[aKey];
-          return `
-            <div class="cron-item">
-              <div class="label">${label}</div>
-              <div class="dates">
-                <span class="planned">Plan: ${fmtDate(planned)}</span>
-                <span class="${actual ? 'actual' : 'missing'}">${actual ? 'Real: '+fmtDate(actual) : 'Pendiente'}</span>
-              </div>
-            </div>
-          `;
-        }).join('')}
+      <div class="gantt-wrap">${renderGanttSVG(r)}</div>
+      <div class="gantt-legend">
+        <span><span class="sw" style="background:var(--panel-2); border:1px solid var(--line);"></span>Planificado</span>
+        <span><span class="sw" style="background:var(--steel);"></span>Real / En curso</span>
+        <span><span class="sw dot" style="background:var(--panel-2); border:2px solid var(--muted);"></span>Hito planificado</span>
+        <span><span class="sw dot" style="background:var(--green);"></span>Hito completado</span>
+        <span><span class="sw dot" style="background:var(--red);"></span>Hito pendiente (vencido)</span>
       </div>
     </div>
   `).join('');
+}
+
+const GANTT_PHASES = [
+  ['fab_start_planned','fab_start_actual','fab_finish_planned','fab_finish_actual','Fabricación'],
+  ['surface_treatment_start_planned','surface_treatment_start_actual','surface_treatment_finish_planned','surface_treatment_finish_actual','Tratamiento Superficial'],
+  ['delivery_start_planned','delivery_start_actual','delivery_finish_planned','delivery_finish_actual','Entrega'],
+];
+
+const GANTT_MILESTONES = [
+  ['po_issue_date_planned','po_issue_date_actual','Compra (PO)'],
+  ['raw_material_receiving_planned','raw_material_receiving_actual','Recep. Mat. Prima'],
+  ['connection_design_calc_planned','connection_design_calc_actual','Cálculo Conexión'],
+  ['tekla_model_planned','tekla_model_actual','Modelo TEKLA'],
+  ['approval_jv_planned','approval_jv_actual','Aprobación JV'],
+  ['iff_date_planned','iff_date_actual','IFF'],
+];
+
+function renderGanttSVG(r){
+  const allDates = [];
+  GANTT_PHASES.forEach(([ps,pas,pf,paf]) => { [ps,pas,pf,paf].forEach(k => r[k] && allDates.push(r[k])); });
+  GANTT_MILESTONES.forEach(([p,a]) => { [p,a].forEach(k => r[k] && allDates.push(r[k])); });
+  const today = new Date().toISOString().slice(0,10);
+  allDates.push(today);
+
+  if (allDates.length < 2){
+    return '<div style="color:var(--muted); font-size:12px; padding:10px;">No hay suficientes fechas para dibujar el cronograma.</div>';
+  }
+
+  const parsed = allDates.map(d => new Date(d + 'T00:00:00').getTime());
+  let minT = Math.min(...parsed);
+  let maxT = Math.max(...parsed);
+  const pad = (maxT - minT) * 0.05 || 86400000 * 7;
+  minT -= pad; maxT += pad;
+
+  const width = 900;
+  const leftLabelW = 160;
+  const rightPad = 20;
+  const chartW = width - leftLabelW - rightPad;
+  const rowH = 30;
+  const topPad = 26;
+  const rows = GANTT_PHASES.length + GANTT_MILESTONES.length;
+  const height = topPad + rows * rowH + 20;
+
+  const xPos = (t) => leftLabelW + ((t - minT) / (maxT - minT)) * chartW;
+  const toTime = (d) => d ? new Date(d + 'T00:00:00').getTime() : null;
+
+  let svg = `<svg class="gantt-svg" viewBox="0 0 ${width} ${height}" width="100%" style="min-width:640px;">`;
+
+  // month gridlines
+  const startDate = new Date(minT);
+  const gridDate = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+  while (gridDate.getTime() < maxT){
+    const t = gridDate.getTime();
+    if (t > minT){
+      const x = xPos(t);
+      svg += `<line class="grid-line" x1="${x}" y1="${topPad-14}" x2="${x}" y2="${height-10}" />`;
+      svg += `<text class="axis-label" x="${x+3}" y="${topPad-18}">${gridDate.toLocaleDateString('es-ES',{month:'short',year:'2-digit'})}</text>`;
+    }
+    gridDate.setMonth(gridDate.getMonth()+1);
+  }
+
+  // today line
+  const todayX = xPos(new Date(today+'T00:00:00').getTime());
+  svg += `<line class="today-line" x1="${todayX}" y1="${topPad-14}" x2="${todayX}" y2="${height-10}" />`;
+  svg += `<text class="axis-label" x="${todayX+3}" y="${height-2}" fill="var(--amber)">hoy</text>`;
+
+  let row = 0;
+
+  GANTT_PHASES.forEach(([ps,pas,pf,paf,label]) => {
+    const y = topPad + row*rowH;
+    const midY = y + rowH/2;
+    svg += `<text class="row-label" x="${leftLabelW-10}" y="${midY+4}">${label}</text>`;
+
+    const pStart = toTime(r[ps]), pFinish = toTime(r[pf]);
+    if (pStart && pFinish){
+      const x1 = xPos(pStart), x2 = xPos(pFinish);
+      svg += `<rect x="${x1}" y="${midY-6}" width="${Math.max(x2-x1,2)}" height="12" rx="3" fill="var(--panel-2)" stroke="var(--line)" />`;
+    }
+    const aStart = toTime(r[pas]), aFinish = toTime(r[paf]);
+    if (aStart){
+      const endT = aFinish || Math.min(new Date(today+'T00:00:00').getTime(), maxT);
+      const x1 = xPos(aStart), x2 = xPos(endT);
+      const color = aFinish ? 'var(--green)' : 'var(--steel)';
+      svg += `<rect x="${x1}" y="${midY-4}" width="${Math.max(x2-x1,2)}" height="8" rx="3" fill="${color}" />`;
+    }
+    row++;
+  });
+
+  GANTT_MILESTONES.forEach(([pKey,aKey,label]) => {
+    const y = topPad + row*rowH;
+    const midY = y + rowH/2;
+    svg += `<text class="row-label" x="${leftLabelW-10}" y="${midY+4}">${label}</text>`;
+
+    const pT = toTime(r[pKey]);
+    const aT = toTime(r[aKey]);
+    const nowT = new Date(today+'T00:00:00').getTime();
+
+    if (pT && aT){
+      svg += `<line x1="${xPos(pT)}" y1="${midY}" x2="${xPos(aT)}" y2="${midY}" stroke="var(--line)" stroke-width="1.5" />`;
+    }
+    if (pT){
+      svg += `<circle cx="${xPos(pT)}" cy="${midY}" r="5" fill="var(--panel-2)" stroke="var(--muted)" stroke-width="1.5" />`;
+    }
+    if (aT){
+      svg += `<circle cx="${xPos(aT)}" cy="${midY}" r="5" fill="var(--green)" />`;
+    } else if (pT && pT < nowT){
+      svg += `<circle cx="${xPos(pT)}" cy="${midY}" r="5" fill="var(--red)" />`;
+    }
+    row++;
+  });
+
+  svg += '</svg>';
+  return svg;
 }
 
 /* ---------------- ISSUES ---------------- */
