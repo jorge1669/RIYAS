@@ -329,6 +329,73 @@
   }
   .import-status.err{ color:var(--red); }
   .import-status.ok{ color:var(--green); }
+
+  .btn.issues{ position:relative; }
+  .btn.issues .badge{
+    position:absolute; top:-6px; right:-6px;
+    background:var(--red); color:#fff; font-size:10px; font-weight:700;
+    min-width:16px; height:16px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    padding:0 3px; font-family:'IBM Plex Mono', monospace;
+  }
+
+  .hold-banner{
+    background: rgba(224,83,83,0.08); border:1px solid rgba(224,83,83,0.4);
+    border-radius: var(--radius); padding:14px 18px; margin-bottom:20px;
+    display:flex; align-items:flex-start; gap:12px;
+  }
+  .hold-banner .icon{ font-size:18px; line-height:1.2; }
+  .hold-banner .title{ font-family:'Oswald', sans-serif; font-size:14px; color:var(--red); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:6px; }
+  .hold-banner .items{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--text); line-height:1.7; }
+  .hold-banner .items b{ color:var(--red); }
+
+  /* Modal */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:2000;
+    display:none; align-items:flex-start; justify-content:center; padding:40px 20px; overflow-y:auto;
+  }
+  .modal-overlay.open{ display:flex; }
+  .modal-box{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    max-width:760px; width:100%; padding:26px 28px; margin-bottom:40px;
+  }
+  .modal-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; }
+  .modal-title{ font-family:'Oswald', sans-serif; font-size:20px; text-transform:uppercase; letter-spacing:0.02em; }
+  .modal-close{ background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; line-height:1; }
+  .modal-close:hover{ color:var(--text); }
+  .modal-subtitle{ color:var(--muted); font-size:12.5px; margin-bottom:20px; }
+
+  .issue-group{ margin-bottom:20px; }
+  .issue-group-title{
+    font-family:'IBM Plex Mono', monospace; font-size:12px; text-transform:uppercase; letter-spacing:0.04em;
+    color:var(--steel); margin-bottom:4px; display:flex; align-items:center; gap:8px;
+  }
+  .issue-count{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:1px 8px; font-size:11px; color:var(--text);
+  }
+  .issue-count.zero{ color:var(--green); }
+  .issue-desc{ font-size:11.5px; color:var(--muted); margin-bottom:10px; }
+  .issue-items{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--text); background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; max-height:160px; overflow-y:auto; }
+  .issue-items div{ padding:2px 0; }
+  .issue-items .empty{ color:var(--green); }
+
+  .change-card{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px; margin-bottom:16px; }
+  .change-card h3{ font-family:'Oswald', sans-serif; font-size:14px; text-transform:uppercase; margin:0 0 10px; color:var(--steel); }
+  .change-row{ font-family:'IBM Plex Mono', monospace; font-size:12px; padding:4px 0; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:12px; }
+  .change-row:last-child{ border-bottom:none; }
+  .change-tag{ font-size:10px; padding:1px 6px; border-radius:3px; font-weight:600; text-transform:uppercase; }
+  .change-tag.new{ background:rgba(62,207,142,0.15); color:var(--green); }
+  .change-tag.removed{ background:rgba(224,83,83,0.15); color:var(--red); }
+  .change-tag.updated{ background:rgba(242,165,65,0.15); color:var(--amber); }
+
+  .cron-search-result{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:20px 22px; margin-top:16px; }
+  .cron-title{ font-family:'Oswald', sans-serif; font-size:16px; margin-bottom:14px; }
+  .cron-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap:12px; }
+  .cron-item{ background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; }
+  .cron-item .label{ font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; font-family:'IBM Plex Mono', monospace; margin-bottom:5px; }
+  .cron-item .dates{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; display:flex; justify-content:space-between; gap:8px; }
+  .cron-item .dates .planned{ color:var(--muted); }
+  .cron-item .dates .actual{ color:var(--green); }
+  .cron-item .dates .missing{ color:var(--red); }
 </style>
 </head>
 <body>
@@ -367,6 +434,7 @@
       <input type="file" id="excelInput" accept=".xlsx,.xls" class="hidden">
       <button class="btn" id="importBtn">⤒ Importar Excel</button>
       <span class="import-status" id="importStatus"></span>
+      <button class="btn issues" id="issuesBtn">⚠ Issues<span class="badge hidden" id="issuesBadge">0</span></button>
       <button class="btn" id="refreshBtn">↻ Actualizar</button>
       <button class="btn" id="logoutBtn">Cerrar sesión</button>
     </div>
@@ -376,18 +444,33 @@
     <div class="tabs">
       <button class="tab-btn active" data-tab="overview">Resumen</button>
       <button class="tab-btn" data-tab="breakdown">Desglose por Estructura</button>
+      <button class="tab-btn" data-tab="cronograma">Cronograma</button>
+      <button class="tab-btn" data-tab="changes">Cambios</button>
     </div>
 
     <div id="overviewTab" class="tab-panel active">
       <div class="center-msg" id="loadingMsg">Cargando datos de fabricación…</div>
     </div>
     <div id="breakdownTab" class="tab-panel"></div>
+    <div id="cronogramaTab" class="tab-panel"></div>
+    <div id="changesTab" class="tab-panel"></div>
   </main>
 
-  <footer>Fuente: tablas <span class="mono">structures</span> y <span class="mono">weight_breakdown</span> en Supabase (Postgres) · Acceso protegido con Supabase Auth</footer>
+  <footer>Fuente: tablas <span class="mono">structures</span>, <span class="mono">weight_breakdown</span> y <span class="mono">time_schedule</span> en Supabase (Postgres) · Acceso protegido con Supabase Auth</footer>
 </div>
 
 <div id="tooltip"></div>
+
+<div class="modal-overlay" id="issuesModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div class="modal-title">Issues detectados</div>
+      <button class="modal-close" id="issuesModalClose">✕</button>
+    </div>
+    <div class="modal-subtitle">Comprobaciones automáticas de consistencia entre las 3 pestañas del Excel (Fabrication Status, Weight Dst. List, Time Sch.) y dentro de cada tabla.</div>
+    <div id="issuesContent"></div>
+  </div>
+</div>
 
 <script>
 const SUPABASE_URL = 'https://cuvhvwsvylofgjpwwwzg.supabase.co';
@@ -396,11 +479,17 @@ const SESSION_KEY = 'riyas_dashboard_session';
 
 let allRows = [];
 let breakdownRows = [];
+let timeScheduleRows = [];
 let sortKey = 'job_ref';
 let sortDir = 1;
 let bdSortKey = 'total_weight';
 let bdSortDir = -1;
 let session = null;
+
+function isHold(r){
+  const desc = (r.structure_description || r.title || '') + '';
+  return desc.toUpperCase().includes('HOLD');
+}
 
 const fmtWeight = (v) => v === null || v === undefined ? '—' : Number(v).toLocaleString('en-US',{maximumFractionDigits:1}) + ' kg';
 const fmtPct = (v) => v === null || v === undefined ? '—' : (Number(v)*100).toFixed(1) + '%';
@@ -525,24 +614,32 @@ async function loadData(){
   const ok = await ensureValidSession();
   if (!ok){ clearSession(); showLogin(); return; }
   try{
-    const [structRes, breakdownRes] = await Promise.all([
+    const [structRes, breakdownRes, tsRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/structures?select=*&order=job_ref.asc`, {
         headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
       }),
       fetch(`${SUPABASE_URL}/rest/v1/weight_breakdown?select=*&order=job_ref.asc`, {
         headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+      }),
+      fetch(`${SUPABASE_URL}/rest/v1/time_schedule?select=*&order=job_ref.asc`, {
+        headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
       })
     ]);
 
-    if (structRes.status === 401 || breakdownRes.status === 401){ clearSession(); showLogin(); return; }
+    if (structRes.status === 401 || breakdownRes.status === 401 || tsRes.status === 401){ clearSession(); showLogin(); return; }
     if (!structRes.ok) throw new Error(`HTTP ${structRes.status}: ${await structRes.text()}`);
     if (!breakdownRes.ok) throw new Error(`HTTP ${breakdownRes.status}: ${await breakdownRes.text()}`);
+    if (!tsRes.ok) throw new Error(`HTTP ${tsRes.status}: ${await tsRes.text()}`);
 
     allRows = await structRes.json();
     breakdownRows = await breakdownRes.json();
+    timeScheduleRows = await tsRes.json();
     setStatus('ok', `Conectado · ${allRows.length} estructuras`);
     renderOverview();
     renderBreakdown();
+    renderCronograma();
+    renderChanges();
+    updateIssuesBadge();
   } catch(err){
     setStatus('error', 'Error de conexión');
     document.getElementById('overviewTab').innerHTML = `<div class="center-msg">No se pudieron cargar los datos desde Supabase.<br><span class="mono" style="color:var(--red)">${(err && err.message) ? err.message : err}</span></div>`;
@@ -567,6 +664,26 @@ const WD_COLS = [
   null, 'title', 'short_name', 'package', 'reference_drawing', 'job_ref',
   'handrail_weight','ladder_weight','grating_weight','tread_weight','chq_plate_weight',
   'main_steel_weight','total_weight'
+];
+
+const TS_COLS = [
+  null, 'package', 'dwg_number', 'structure', 'bolt_type', 'short_name', 'model_description',
+  'ifc_weight', 'actual_weight_tekla', 'job_ref',
+  'ifr_receiving_date', 'ifc_receiving_date_planned', 'ifc_receiving_date_actual', 'ifc_without_hold',
+  'po_issue_date_planned', 'po_issue_date_actual',
+  'raw_material_receiving_planned', 'raw_material_receiving_actual',
+  'connection_design_calc_planned', 'connection_design_calc_actual',
+  'tekla_model_planned', 'tekla_model_actual',
+  'approval_jv_planned', 'approval_jv_actual', 'approval_jv_resubmission_expected',
+  'iff_date_planned', 'iff_date_actual',
+  'fab_start_planned', 'fab_start_actual',
+  'fab_finish_planned', 'fab_finish_actual',
+  'surface_treatment_start_planned', 'surface_treatment_start_actual',
+  'surface_treatment_finish_planned', 'surface_treatment_finish_actual',
+  'delivery_start_planned', 'delivery_start_actual',
+  'delivery_finish_planned', 'delivery_finish_actual',
+  'ros_date', 'new_ros_date_1', 'new_ros_date_2', 'new_ros_date_3',
+  'subcontractor_erection', 'remark', 'discussions'
 ];
 
 function excelDateToISO(v){
@@ -599,8 +716,21 @@ function cleanTxt(v){
   return s;
 }
 
-const DATE_FIELDS = new Set(['shop_drawing_received_date','delivery_start_date_planned','delivery_start_date','delivery_finish_date_planned','delivery_finish_date']);
-const TXT_FIELDS = new Set(['package','structure_description','bolt_type','short_name','approved_by_jv','job_ref','title','reference_drawing']);
+const DATE_FIELDS = new Set([
+  'shop_drawing_received_date','delivery_start_date_planned','delivery_start_date','delivery_finish_date_planned','delivery_finish_date',
+  'ifr_receiving_date','ifc_receiving_date_planned','ifc_receiving_date_actual','ifc_without_hold',
+  'po_issue_date_planned','po_issue_date_actual','raw_material_receiving_planned','raw_material_receiving_actual',
+  'connection_design_calc_planned','connection_design_calc_actual','tekla_model_planned','tekla_model_actual',
+  'approval_jv_planned','approval_jv_actual','approval_jv_resubmission_expected','iff_date_planned','iff_date_actual',
+  'fab_start_planned','fab_start_actual','fab_finish_planned','fab_finish_actual',
+  'surface_treatment_start_planned','surface_treatment_start_actual','surface_treatment_finish_planned','surface_treatment_finish_actual',
+  'delivery_start_planned','delivery_start_actual','delivery_finish_planned','delivery_finish_actual',
+  'ros_date','new_ros_date_1','new_ros_date_2','new_ros_date_3'
+]);
+const TXT_FIELDS = new Set([
+  'package','structure_description','bolt_type','short_name','approved_by_jv','job_ref','title','reference_drawing',
+  'dwg_number','structure','model_description','subcontractor_erection','remark','discussions'
+]);
 
 function parseSheetRows(rows, cols, startIdx){
   const dataRows = rows.slice(startIdx);
@@ -637,7 +767,14 @@ async function parseExcelFile(file){
     wdParsed = parseSheetRows(wdRows, WD_COLS, 3);
   }
 
-  return { fabParsed, wdParsed };
+  let tsParsed = [];
+  const tsSheetName = wb.SheetNames.find(n => n.toLowerCase().includes('time') || n.toLowerCase().includes('sch'));
+  if (tsSheetName){
+    const tsRows = XLSX.utils.sheet_to_json(wb.Sheets[tsSheetName], { header: 1, raw: true, defval: null });
+    tsParsed = parseSheetRows(tsRows, TS_COLS, 6);
+  }
+
+  return { fabParsed, wdParsed, tsParsed };
 }
 
 async function upsertRows(table, rows, conflictCol){
@@ -670,8 +807,23 @@ document.getElementById('excelInput').addEventListener('change', async (e) => {
   if (!ok){ clearSession(); showLogin(); return; }
 
   try{
-    const { fabParsed, wdParsed } = await parseExcelFile(file);
+    const { fabParsed, wdParsed, tsParsed } = await parseExcelFile(file);
     if (fabParsed.length === 0) throw new Error('No se encontraron filas válidas en "Fabrication Status"');
+
+    statusEl.textContent = 'Guardando estado anterior para comparar…';
+    const beforeRes = await fetch(`${SUPABASE_URL}/rest/v1/structures?select=*`, {
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+    });
+    const beforeStructures = beforeRes.ok ? await beforeRes.json() : [];
+
+    await fetch(`${SUPABASE_URL}/rest/v1/import_snapshots`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify([{ structures_json: beforeStructures, weight_breakdown_json: breakdownRows, time_schedule_json: timeScheduleRows }])
+    });
 
     statusEl.textContent = `Subiendo ${fabParsed.length} filas de fabricación…`;
     await upsertRows('structures', fabParsed, 'job_ref');
@@ -681,8 +833,16 @@ document.getElementById('excelInput').addEventListener('change', async (e) => {
       await upsertRows('weight_breakdown', wdParsed, 'job_ref');
     }
 
+    if (tsParsed.length > 0){
+      statusEl.textContent = `Subiendo ${tsParsed.length} filas de cronograma…`;
+      await upsertRows('time_schedule', tsParsed, 'job_ref');
+    }
+
+    statusEl.textContent = 'Calculando cambios frente a la versión anterior…';
+    await computeAndLogChanges(beforeStructures, fabParsed);
+
     statusEl.className = 'import-status ok';
-    statusEl.textContent = `✓ ${fabParsed.length} estructuras · ${wdParsed.length} desgloses actualizados`;
+    statusEl.textContent = `✓ ${fabParsed.length} estructuras · ${wdParsed.length} desgloses · ${tsParsed.length} cronogramas actualizados`;
     await loadData();
   } catch(err){
     statusEl.className = 'import-status err';
@@ -742,8 +902,18 @@ function renderOverview(){
   const pk1 = summarize(allRows.filter(r=>r.package==='PK1'));
   const pk2 = summarize(allRows.filter(r=>r.package==='PK2'));
 
+  const holdItems = allRows.filter(isHold);
+
   const app = document.getElementById('overviewTab');
   app.innerHTML = `
+    ${holdItems.length > 0 ? `
+    <div class="hold-banner">
+      <div class="icon">⏸️</div>
+      <div>
+        <div class="title">${holdItems.length} estructura${holdItems.length>1?'s':''} en HOLD</div>
+        <div class="items">${holdItems.map(r => `<b>${r.job_ref}</b> — ${r.structure_description}`).join('<br>')}</div>
+      </div>
+    </div>` : ''}
     <div class="kpi-row">
       <div class="kpi" style="--accent: var(--steel)">
         <div class="kpi-label">Estructuras totales</div>
@@ -1019,6 +1189,248 @@ function renderBreakdownTable(){
 }
 
 document.getElementById('refreshBtn').addEventListener('click', loadData);
+
+/* ---------------- CRONOGRAMA TAB ---------------- */
+
+const MILESTONE_PAIRS = [
+  ['po_issue_date_planned','po_issue_date_actual','Emisión Orden de Compra (PO)'],
+  ['raw_material_receiving_planned','raw_material_receiving_actual','Recepción Materia Prima'],
+  ['connection_design_calc_planned','connection_design_calc_actual','Cálculo Diseño Conexión (Ingeniería)'],
+  ['tekla_model_planned','tekla_model_actual','Modelo TEKLA y Planos Erección'],
+  ['approval_jv_planned','approval_jv_actual','Aprobación JV'],
+  ['iff_date_planned','iff_date_actual','Fecha IFF'],
+  ['fab_start_planned','fab_start_actual','Inicio Fabricación'],
+  ['fab_finish_planned','fab_finish_actual','Fin Fabricación'],
+  ['surface_treatment_start_planned','surface_treatment_start_actual','Inicio Tratamiento Superficial'],
+  ['surface_treatment_finish_planned','surface_treatment_finish_actual','Fin Tratamiento Superficial'],
+  ['delivery_start_planned','delivery_start_actual','Inicio Entrega'],
+  ['delivery_finish_planned','delivery_finish_actual','Fin Entrega'],
+];
+
+function renderCronograma(){
+  const panel = document.getElementById('cronogramaTab');
+  panel.innerHTML = `
+    <div class="toolbar">
+      <input type="text" id="cronSearchInput" placeholder="Busca una estructura por Job Ref, Short Name o descripción…">
+      <span class="count" id="cronCount">${timeScheduleRows.length} estructuras en cronograma</span>
+    </div>
+    <div id="cronResults"></div>
+  `;
+  document.getElementById('cronSearchInput').addEventListener('input', renderCronogramaResults);
+}
+
+function renderCronogramaResults(){
+  const search = (document.getElementById('cronSearchInput').value || '').trim().toLowerCase();
+  const resultsEl = document.getElementById('cronResults');
+  if (!search){
+    resultsEl.innerHTML = '<div class="center-msg" style="padding:30px;">Escribe para buscar una estructura y ver su cronograma completo.</div>';
+    return;
+  }
+  const matches = timeScheduleRows.filter(r => {
+    const hay = [r.job_ref, r.short_name, r.structure, r.model_description].filter(Boolean).join(' ').toLowerCase();
+    return hay.includes(search);
+  }).slice(0, 20);
+
+  if (matches.length === 0){
+    resultsEl.innerHTML = '<div class="center-msg" style="padding:30px;">Sin resultados.</div>';
+    return;
+  }
+
+  resultsEl.innerHTML = matches.map(r => `
+    <div class="cron-search-result">
+      <div class="cron-title">${r.structure || r.short_name || r.job_ref} <span class="mono" style="color:var(--muted); font-size:13px;">— ${r.job_ref}${r.package ? ' · '+r.package : ''}${r.short_name ? ' · '+r.short_name : ''}</span></div>
+      <div class="cron-grid">
+        ${MILESTONE_PAIRS.map(([pKey, aKey, label]) => {
+          const planned = r[pKey];
+          const actual = r[aKey];
+          return `
+            <div class="cron-item">
+              <div class="label">${label}</div>
+              <div class="dates">
+                <span class="planned">Plan: ${fmtDate(planned)}</span>
+                <span class="${actual ? 'actual' : 'missing'}">${actual ? 'Real: '+fmtDate(actual) : 'Pendiente'}</span>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ---------------- ISSUES ---------------- */
+
+function computeIssues(){
+  const fabRefs = new Set(allRows.map(r => r.job_ref));
+  const wdRefs = new Set(breakdownRows.map(r => r.job_ref));
+  const tsRefs = new Set(timeScheduleRows.map(r => r.job_ref));
+
+  const fabNotInWd = allRows.filter(r => !wdRefs.has(r.job_ref));
+  const wdNotInFab = breakdownRows.filter(r => !fabRefs.has(r.job_ref));
+  const fabNotInTs = allRows.filter(r => !tsRefs.has(r.job_ref));
+  const tsNotInFab = timeScheduleRows.filter(r => !fabRefs.has(r.job_ref));
+
+  const shortNameMap = {};
+  allRows.forEach(r => {
+    if (!r.short_name) return;
+    (shortNameMap[r.short_name] = shortNameMap[r.short_name] || []).push(r.job_ref);
+  });
+  const dupShortNames = Object.entries(shortNameMap).filter(([,refs]) => refs.length > 1);
+
+  const holdItems = allRows.filter(isHold);
+
+  return [
+    {
+      title: 'Estructuras en "Fabrication Status" sin desglose en "Weight Dst. List"',
+      desc: 'Compara los job_ref de ambas pestañas del Excel. Puede indicar filas olvidadas al copiar el desglose de pesos.',
+      items: fabNotInWd.map(r => `${r.job_ref} — ${r.structure_description}`)
+    },
+    {
+      title: 'Estructuras en "Weight Dst. List" sin fila en "Fabrication Status"',
+      desc: 'El caso inverso: un desglose de peso sin seguimiento de fabricación asociado.',
+      items: wdNotInFab.map(r => `${r.job_ref} — ${r.title}`)
+    },
+    {
+      title: 'Estructuras en "Fabrication Status" sin cronograma en "Time Sch."',
+      desc: 'Estructuras con seguimiento de fabricación pero sin fechas de hitos (compra, TEKLA, aprobación JV, etc).',
+      items: fabNotInTs.map(r => `${r.job_ref} — ${r.structure_description}`)
+    },
+    {
+      title: 'Estructuras en "Time Sch." sin fila en "Fabrication Status"',
+      desc: 'Tienen cronograma de hitos pero no aparecen en el seguimiento de fabricación semanal.',
+      items: tsNotInFab.map(r => `${r.job_ref} — ${r.structure}`)
+    },
+    {
+      title: 'Short Name repetido en varias estructuras',
+      desc: 'Un mismo "short name" (ej. MSS865) asignado a más de un job_ref. Puede ser intencional (subdivisiones) o un error de copia.',
+      items: dupShortNames.map(([name, refs]) => `${name} → ${refs.join(', ')}`)
+    },
+    {
+      title: 'Estructuras marcadas en HOLD',
+      desc: 'Filas cuya descripción contiene "HOLD" — normalmente pendientes de decisión o congeladas.',
+      items: holdItems.map(r => `${r.job_ref} — ${r.structure_description}`)
+    }
+  ];
+}
+
+function updateIssuesBadge(){
+  const issues = computeIssues();
+  const total = issues.reduce((a,g) => a + g.items.length, 0);
+  const badge = document.getElementById('issuesBadge');
+  if (total > 0){
+    badge.textContent = total > 99 ? '99+' : total;
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+function openIssuesModal(){
+  const groups = computeIssues();
+  const content = document.getElementById('issuesContent');
+  content.innerHTML = groups.map(g => `
+    <div class="issue-group">
+      <div class="issue-group-title">${g.title} <span class="issue-count ${g.items.length===0?'zero':''}">${g.items.length}</span></div>
+      <div class="issue-desc">${g.desc}</div>
+      <div class="issue-items">${g.items.length ? g.items.map(i => `<div>${i}</div>`).join('') : '<div class="empty">Sin hallazgos ✓</div>'}</div>
+    </div>
+  `).join('');
+  document.getElementById('issuesModal').classList.add('open');
+}
+
+document.getElementById('issuesBtn').addEventListener('click', openIssuesModal);
+document.getElementById('issuesModalClose').addEventListener('click', () => {
+  document.getElementById('issuesModal').classList.remove('open');
+});
+document.getElementById('issuesModal').addEventListener('click', (e) => {
+  if (e.target.id === 'issuesModal') document.getElementById('issuesModal').classList.remove('open');
+});
+
+/* ---------------- CHANGES TAB ---------------- */
+
+async function renderChanges(){
+  const panel = document.getElementById('changesTab');
+  panel.innerHTML = '<div class="center-msg">Cargando historial de cambios…</div>';
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/change_log?select=*&order=created_at.desc&limit=1`, {
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = await res.json();
+    if (rows.length === 0){
+      panel.innerHTML = '<div class="center-msg">Todavía no hay ninguna importación registrada con la que comparar. En cuanto uses "Importar Excel" por primera vez tras esta actualización, aquí verás los cambios frente a la versión anterior.</div>';
+      return;
+    }
+    const c = rows[0].changes_json;
+    const when = new Date(rows[0].created_at).toLocaleString('es-ES');
+    panel.innerHTML = `
+      <div style="color:var(--muted); font-size:12px; font-family:'IBM Plex Mono', monospace; margin-bottom:16px;">Última importación: ${when}</div>
+      <div class="change-card">
+        <h3>Estructuras nuevas (${c.newStructures.length})</h3>
+        ${c.newStructures.length ? c.newStructures.map(s => `<div class="change-row"><span><span class="change-tag new">nuevo</span> ${s.job_ref} — ${s.structure_description}</span></div>`).join('') : '<div style="color:var(--muted); font-size:12px;">Ninguna</div>'}
+      </div>
+      <div class="change-card">
+        <h3>Cambios de peso significativos (${c.weightChanges.length})</h3>
+        ${c.weightChanges.length ? c.weightChanges.map(s => `<div class="change-row"><span><span class="change-tag updated">peso</span> ${s.job_ref}</span><span>${s.before.toFixed(1)} kg → ${s.after.toFixed(1)} kg</span></div>`).join('') : '<div style="color:var(--muted); font-size:12px;">Ninguno</div>'}
+      </div>
+      <div class="change-card">
+        <h3>HOLD añadidos (${c.holdAdded.length})</h3>
+        ${c.holdAdded.length ? c.holdAdded.map(s => `<div class="change-row"><span><span class="change-tag removed">hold</span> ${s.job_ref} — ${s.structure_description}</span></div>`).join('') : '<div style="color:var(--muted); font-size:12px;">Ninguno</div>'}
+      </div>
+      <div class="change-card">
+        <h3>HOLD liberados (${c.holdRemoved.length})</h3>
+        ${c.holdRemoved.length ? c.holdRemoved.map(s => `<div class="change-row"><span><span class="change-tag new">liberado</span> ${s.job_ref} — ${s.structure_description}</span></div>`).join('') : '<div style="color:var(--muted); font-size:12px;">Ninguno</div>'}
+      </div>
+      <div class="change-card">
+        <h3>Estructuras eliminadas (${c.removedStructures.length})</h3>
+        ${c.removedStructures.length ? c.removedStructures.map(s => `<div class="change-row"><span><span class="change-tag removed">eliminado</span> ${s.job_ref} — ${s.structure_description}</span></div>`).join('') : '<div style="color:var(--muted); font-size:12px;">Ninguna</div>'}
+      </div>
+    `;
+  } catch(err){
+    panel.innerHTML = `<div class="center-msg">No se pudo cargar el historial de cambios.<br><span class="mono" style="color:var(--red)">${err.message||err}</span></div>`;
+  }
+}
+
+async function computeAndLogChanges(beforeStructures, afterStructures){
+  const beforeMap = {};
+  beforeStructures.forEach(r => beforeMap[r.job_ref] = r);
+  const afterMap = {};
+  afterStructures.forEach(r => afterMap[r.job_ref] = r);
+
+  const newStructures = afterStructures.filter(r => !beforeMap[r.job_ref]);
+  const removedStructures = beforeStructures.filter(r => !afterMap[r.job_ref]);
+
+  const weightChanges = [];
+  const holdAdded = [];
+  const holdRemoved = [];
+
+  afterStructures.forEach(r => {
+    const prev = beforeMap[r.job_ref];
+    if (!prev) return;
+    const beforeW = Number(prev.total_fab_weight) || 0;
+    const afterW = Number(r.total_fab_weight) || 0;
+    if (Math.abs(afterW - beforeW) > 0.5){
+      weightChanges.push({ job_ref: r.job_ref, before: beforeW, after: afterW });
+    }
+    const prevHold = isHold(prev);
+    const nowHold = isHold(r);
+    if (!prevHold && nowHold) holdAdded.push(r);
+    if (prevHold && !nowHold) holdRemoved.push(r);
+  });
+
+  const changes = { newStructures, removedStructures, weightChanges, holdAdded, holdRemoved };
+
+  await fetch(`${SUPABASE_URL}/rest/v1/change_log`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    },
+    body: JSON.stringify([{ changes_json: changes }])
+  });
+}
 
 /* ---------------- INIT ---------------- */
 
