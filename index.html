@@ -868,8 +868,14 @@ document.getElementById('excelInput').addEventListener('change', async (e) => {
 
 const tooltipEl = document.getElementById('tooltip');
 
+function renderTooltipHTML(evt, html){
+  tooltipEl.innerHTML = html;
+  positionTooltip(evt);
+  tooltipEl.style.display = 'block';
+}
+
 function showTooltip(evt, row){
-  tooltipEl.innerHTML = `
+  renderTooltipHTML(evt, `
     <div class="tt-title">${row.structure_description || row.short_name || row.job_ref}</div>
     <div class="tt-row"><span>Job Ref</span><span>${row.job_ref || '—'}</span></div>
     <div class="tt-row"><span>Shop Dwg. Recibido</span><span>${fmtDate(row.shop_drawing_received_date)}</span></div>
@@ -877,9 +883,7 @@ function showTooltip(evt, row){
     <div class="tt-row"><span>Entrega Inicio Real</span><span>${fmtDate(row.delivery_start_date)}</span></div>
     <div class="tt-row"><span>Entrega Fin Plan.</span><span>${fmtDate(row.delivery_finish_date_planned)}</span></div>
     <div class="tt-row"><span>Entrega Fin Real</span><span>${fmtDate(row.delivery_finish_date)}</span></div>
-  `;
-  positionTooltip(evt);
-  tooltipEl.style.display = 'block';
+  `);
 }
 
 function positionTooltip(evt){
@@ -895,6 +899,15 @@ function positionTooltip(evt){
 
 function hideTooltip(){
   tooltipEl.style.display = 'none';
+}
+
+function showHTMLTooltip(evt, title, rows){
+  tooltipEl.innerHTML = `
+    <div class="tt-title">${title}</div>
+    ${rows.map(r => `<div class="tt-row"><span>${r.label}</span><span>${r.value}</span></div>`).join('')}
+  `;
+  positionTooltip(evt);
+  tooltipEl.style.display = 'block';
 }
 
 /* ---------------- OVERVIEW RENDER ---------------- */
@@ -1261,6 +1274,16 @@ function renderCronogramaResults(){
       </div>
     </div>
   `).join('');
+
+  resultsEl.querySelectorAll('.gantt-hoverable').forEach(el => {
+    el.addEventListener('mouseenter', (evt) => {
+      const title = el.dataset.ttTitle;
+      const rows = JSON.parse(el.dataset.ttRows);
+      showHTMLTooltip(evt, title, rows);
+    });
+    el.addEventListener('mousemove', positionTooltip);
+    el.addEventListener('mouseleave', hideTooltip);
+  });
 }
 
 const GANTT_PHASES = [
@@ -1303,8 +1326,9 @@ function renderGanttSVG(r){
   const leftLabelW = 160;
   const rightPad = 20;
   const chartW = width - leftLabelW - rightPad;
-  const rowH = 30;
-  const groupGap = 20;
+  const rowH = 34;
+  const groupGap = 24;
+  const headerH = 24;
   const topPad = 26;
 
   const groups = [
@@ -1313,12 +1337,13 @@ function renderGanttSVG(r){
     { label: 'INGENIERÍA', color: 'var(--purple)', rows: GANTT_ENGINEERING_MILESTONES.length, type: 'milestone' },
   ];
   const totalRows = groups.reduce((a,g) => a + g.rows, 0);
-  const height = topPad + totalRows * rowH + groups.length * groupGap + 20;
+  const height = topPad + groups.length*headerH + totalRows*rowH + (groups.length-1)*groupGap + 20;
 
   const xPos = (t) => leftLabelW + ((t - minT) / (maxT - minT)) * chartW;
   const toTime = (d) => d ? new Date(d + 'T00:00:00').getTime() : null;
   const fmtD = (d) => d || '—';
-  const esc = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const esc = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const ttAttrs = (title, rows) => `class="gantt-hoverable" data-tt-title="${esc(title)}" data-tt-rows='${esc(JSON.stringify(rows))}'`;
 
   let svg = `<svg class="gantt-svg" viewBox="0 0 ${width} ${height}" width="100%" style="min-width:640px;">`;
 
@@ -1341,10 +1366,11 @@ function renderGanttSVG(r){
   let y = topPad;
 
   function groupHeader(label, color, rowsInGroup){
-    svg += `<rect x="0" y="${y-4}" width="${width}" height="${rowsInGroup*rowH+8}" fill="${color}" opacity="0.05" />`;
-    svg += `<rect x="0" y="${y-4}" width="4" height="${rowsInGroup*rowH+8}" fill="${color}" opacity="0.6" />`;
-    svg += `<text x="10" y="${y+8}" font-size="9.5" letter-spacing="0.08em" fill="${color}" font-family="'IBM Plex Mono', monospace">${label}</text>`;
-    y += 16;
+    const bandH = headerH + rowsInGroup*rowH;
+    svg += `<rect x="0" y="${y}" width="${width}" height="${bandH}" fill="${color}" opacity="0.05" />`;
+    svg += `<rect x="0" y="${y}" width="4" height="${bandH}" fill="${color}" opacity="0.6" />`;
+    svg += `<text x="10" y="${y+16}" font-size="9.5" letter-spacing="0.08em" fill="${color}" font-family="'IBM Plex Mono', monospace">${label}</text>`;
+    y += headerH;
   }
 
   // Phases group
@@ -1356,14 +1382,16 @@ function renderGanttSVG(r){
     const pStart = toTime(r[ps]), pFinish = toTime(r[pf]);
     if (pStart && pFinish){
       const x1 = xPos(pStart), x2 = xPos(pFinish);
-      svg += `<rect x="${x1}" y="${midY-6}" width="${Math.max(x2-x1,2)}" height="12" rx="3" fill="var(--panel-2)" stroke="var(--line)"><title>${esc(label)} (planificado): ${fmtD(r[ps])} → ${fmtD(r[pf])}</title></rect>`;
+      const rows = [{label:'Inicio', value:fmtD(r[ps])},{label:'Fin', value:fmtD(r[pf])}];
+      svg += `<rect ${ttAttrs(label+' — Planificado', rows)} x="${x1}" y="${midY-6}" width="${Math.max(x2-x1,2)}" height="12" rx="3" fill="var(--panel-2)" stroke="var(--line)" />`;
     }
     const aStart = toTime(r[pas]), aFinish = toTime(r[paf]);
     if (aStart){
       const endT = aFinish || Math.min(new Date(today+'T00:00:00').getTime(), maxT);
       const x1 = xPos(aStart), x2 = xPos(endT);
       const color = aFinish ? 'var(--green)' : 'var(--steel)';
-      svg += `<rect x="${x1}" y="${midY-4}" width="${Math.max(x2-x1,2)}" height="8" rx="3" fill="${color}"><title>${esc(label)} (real): ${fmtD(r[pas])} → ${aFinish ? fmtD(r[paf]) : 'en curso'}</title></rect>`;
+      const rows = [{label:'Inicio', value:fmtD(r[pas])},{label:'Fin', value: aFinish ? fmtD(r[paf]) : 'En curso'}];
+      svg += `<rect ${ttAttrs(label+' — Real', rows)} x="${x1}" y="${midY-4}" width="${Math.max(x2-x1,2)}" height="8" rx="3" fill="${color}" />`;
     }
     y += rowH;
   });
@@ -1383,12 +1411,15 @@ function renderGanttSVG(r){
         svg += `<line x1="${xPos(pT)}" y1="${midY}" x2="${xPos(aT)}" y2="${midY}" stroke="var(--line)" stroke-width="1.5" />`;
       }
       if (pT){
-        svg += `<circle cx="${xPos(pT)}" cy="${midY}" r="5" fill="var(--panel-2)" stroke="var(--muted)" stroke-width="1.5"><title>${esc(label)} planificado: ${fmtD(r[pKey])}</title></circle>`;
+        const rows = [{label:'Estado', value:'Planificado'},{label:'Fecha', value:fmtD(r[pKey])}];
+        svg += `<circle ${ttAttrs(label, rows)} cx="${xPos(pT)}" cy="${midY}" r="5" fill="var(--panel-2)" stroke="var(--muted)" stroke-width="1.5" />`;
       }
       if (aT){
-        svg += `<circle cx="${xPos(aT)}" cy="${midY}" r="5" fill="var(--green)"><title>${esc(label)} completado: ${fmtD(r[aKey])}</title></circle>`;
+        const rows = [{label:'Estado', value:'Completado'},{label:'Fecha', value:fmtD(r[aKey])}];
+        svg += `<circle ${ttAttrs(label, rows)} cx="${xPos(aT)}" cy="${midY}" r="5" fill="var(--green)" />`;
       } else if (pT && pT < nowT){
-        svg += `<circle cx="${xPos(pT)}" cy="${midY}" r="5" fill="var(--red)"><title>${esc(label)} pendiente — planificado para ${fmtD(r[pKey])} (vencido)</title></circle>`;
+        const rows = [{label:'Estado', value:'Pendiente (vencido)'},{label:'Planificado', value:fmtD(r[pKey])}];
+        svg += `<circle ${ttAttrs(label, rows)} cx="${xPos(pT)}" cy="${midY}" r="5" fill="var(--red)" />`;
       }
       y += rowH;
     });
