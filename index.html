@@ -1332,9 +1332,9 @@ function renderGanttSVG(r){
   const topPad = 26;
 
   const groups = [
-    { label: 'PRODUCCIÓN', color: 'var(--steel)', rows: GANTT_PHASES.length, type: 'phase' },
-    { label: 'COMPRA Y LOGÍSTICA', color: 'var(--amber)', rows: GANTT_LOGISTICS_MILESTONES.length, type: 'milestone' },
     { label: 'INGENIERÍA', color: 'var(--purple)', rows: GANTT_ENGINEERING_MILESTONES.length, type: 'milestone' },
+    { label: 'COMPRA Y LOGÍSTICA', color: 'var(--amber)', rows: GANTT_LOGISTICS_MILESTONES.length, type: 'milestone' },
+    { label: 'PRODUCCIÓN', color: 'var(--steel)', rows: GANTT_PHASES.length, type: 'phase' },
   ];
   const totalRows = groups.reduce((a,g) => a + g.rows, 0);
   const height = topPad + groups.length*headerH + totalRows*rowH + (groups.length-1)*groupGap + 20;
@@ -1373,41 +1373,41 @@ function renderGanttSVG(r){
     y += headerH;
   }
 
-  // Phases group
-  groupHeader(groups[0].label, groups[0].color, groups[0].rows);
-  GANTT_PHASES.forEach(([ps,pas,pf,paf,label]) => {
-    const rowTop = y;
-    const plannedY = rowTop + 9;
-    const actualY = rowTop + 23;
-    svg += `<text class="row-label" x="${leftLabelW-10}" y="${rowTop+rowH/2+4}">${label}</text>`;
-    svg += `<text x="${leftLabelW+4}" y="${plannedY+3}" font-size="8" fill="var(--muted)" font-family="'IBM Plex Mono', monospace">PLAN</text>`;
+  function renderPhaseGroup(group){
+    groupHeader(group.label, group.color, group.rows);
+    GANTT_PHASES.forEach(([ps,pas,pf,paf,label]) => {
+      const rowTop = y;
+      const plannedY = rowTop + 9;
+      const actualY = rowTop + 23;
+      svg += `<text class="row-label" x="${leftLabelW-10}" y="${rowTop+rowH/2+4}">${label}</text>`;
+      svg += `<text x="${leftLabelW+4}" y="${plannedY+3}" font-size="8" fill="var(--muted)" font-family="'IBM Plex Mono', monospace">PLAN</text>`;
 
-    const pStart = toTime(r[ps]), pFinish = toTime(r[pf]);
-    if (pStart && pFinish){
-      const x1 = xPos(pStart), x2 = xPos(pFinish);
-      const rows = [{label:'Inicio', value:fmtD(r[ps])},{label:'Fin', value:fmtD(r[pf])}];
-      svg += `<rect ${ttAttrs(label+' — Planificado', rows)} x="${x1}" y="${plannedY-5}" width="${Math.max(x2-x1,2)}" height="10" rx="3" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4,2" />`;
-    }
-    const aStart = toTime(r[pas]), aFinish = toTime(r[paf]);
-    if (aStart){
-      const endT = aFinish || Math.min(new Date(today+'T00:00:00').getTime(), maxT);
-      const x1 = xPos(aStart), x2 = xPos(endT);
-      const color = aFinish ? 'var(--green)' : 'var(--steel)';
-      const rows = [{label:'Inicio', value:fmtD(r[pas])},{label:'Fin', value: aFinish ? fmtD(r[paf]) : 'En curso'}];
-      svg += `<rect ${ttAttrs(label+' — Real', rows)} x="${x1}" y="${actualY-5}" width="${Math.max(x2-x1,2)}" height="10" rx="3" fill="${color}" />`;
-
-      if (pFinish && aFinish){
-        const deltaDays = Math.round((aFinish - pFinish) / 86400000);
-        const deltaColor = deltaDays > 0 ? 'var(--red)' : (deltaDays < 0 ? 'var(--green)' : 'var(--muted)');
-        const deltaText = deltaDays === 0 ? '0d' : (deltaDays > 0 ? `+${deltaDays}d` : `${deltaDays}d`);
-        svg += `<text x="${x2+6}" y="${actualY+3}" font-size="10" font-weight="600" fill="${deltaColor}" font-family="'IBM Plex Mono', monospace">${deltaText}</text>`;
-      } else if (!aFinish){
-        svg += `<text x="${x2+6}" y="${actualY+3}" font-size="9" fill="var(--steel)" font-family="'IBM Plex Mono', monospace">en curso</text>`;
+      const pStart = toTime(r[ps]), pFinish = toTime(r[pf]);
+      if (pStart && pFinish){
+        const x1 = xPos(pStart), x2 = xPos(pFinish);
+        const rows = [{label:'Inicio', value:fmtD(r[ps])},{label:'Fin', value:fmtD(r[pf])}];
+        svg += `<rect ${ttAttrs(label+' — Planificado', rows)} x="${x1}" y="${plannedY-5}" width="${Math.max(x2-x1,2)}" height="10" rx="3" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4,2" />`;
       }
-    }
-    y += rowH;
-  });
-  y += groupGap;
+      const aStart = toTime(r[pas]), aFinish = toTime(r[paf]);
+      if (aStart){
+        const endT = aFinish || Math.min(new Date(today+'T00:00:00').getTime(), maxT);
+        const x1 = xPos(aStart), x2 = xPos(endT);
+        const color = aFinish ? 'var(--green)' : 'var(--steel)';
+        const rows = [{label:'Inicio', value:fmtD(r[pas])},{label:'Fin', value: aFinish ? fmtD(r[paf]) : 'En curso'}];
+        svg += `<rect ${ttAttrs(label+' — Real', rows)} x="${x1}" y="${actualY-5}" width="${Math.max(x2-x1,2)}" height="10" rx="3" fill="${color}" />`;
+
+        if (pFinish && aFinish){
+          const deltaDays = Math.round((aFinish - pFinish) / 86400000);
+          const deltaColor = deltaDays > 0 ? 'var(--red)' : (deltaDays < 0 ? 'var(--green)' : 'var(--muted)');
+          const deltaText = deltaDays === 0 ? '0d' : (deltaDays > 0 ? `+${deltaDays}d` : `${deltaDays}d`);
+          svg += `<text x="${x2+6}" y="${actualY+3}" font-size="10" font-weight="600" fill="${deltaColor}" font-family="'IBM Plex Mono', monospace">${deltaText}</text>`;
+        } else if (!aFinish){
+          svg += `<text x="${x2+6}" y="${actualY+3}" font-size="9" fill="var(--steel)" font-family="'IBM Plex Mono', monospace">en curso</text>`;
+        }
+      }
+      y += rowH;
+    });
+  }
 
   function renderMilestoneGroup(group, list){
     groupHeader(group.label, group.color, group.rows);
@@ -1448,9 +1448,11 @@ function renderGanttSVG(r){
     });
   }
 
+  renderMilestoneGroup(groups[0], GANTT_ENGINEERING_MILESTONES);
+  y += groupGap;
   renderMilestoneGroup(groups[1], GANTT_LOGISTICS_MILESTONES);
   y += groupGap;
-  renderMilestoneGroup(groups[2], GANTT_ENGINEERING_MILESTONES);
+  renderPhaseGroup(groups[2]);
 
   svg += '</svg>';
   return svg;
