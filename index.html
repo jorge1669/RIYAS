@@ -1266,11 +1266,11 @@ function renderCronogramaResults(){
       <div class="cron-title">${r.structure || r.short_name || r.job_ref} <span class="mono" style="color:var(--muted); font-size:13px;">— ${r.job_ref}${r.package ? ' · '+r.package : ''}${r.short_name ? ' · '+r.short_name : ''}</span></div>
       <div class="gantt-wrap">${renderGanttSVG(r)}</div>
       <div class="gantt-legend">
-        <span><span class="sw" style="background:var(--panel-2); border:1px solid var(--line);"></span>Planificado</span>
-        <span><span class="sw" style="background:var(--steel);"></span>Real / En curso</span>
-        <span><span class="sw dot" style="background:var(--panel-2); border:2px solid var(--muted);"></span>Hito planificado</span>
-        <span><span class="sw dot" style="background:var(--green);"></span>Hito completado</span>
-        <span><span class="sw dot" style="background:var(--red);"></span>Hito pendiente (vencido)</span>
+        <span><span class="sw" style="background:transparent; border:1.5px dashed var(--muted);"></span>Planificado</span>
+        <span><span class="sw" style="background:var(--steel);"></span>Real — en curso</span>
+        <span><span class="sw" style="background:var(--green);"></span>Real — completado</span>
+        <span><span style="color:var(--red); font-family:'IBM Plex Mono',monospace; font-weight:600;">+Nd</span> Retraso (días)</span>
+        <span><span style="color:var(--green); font-family:'IBM Plex Mono',monospace; font-weight:600;">-Nd</span> Adelanto (días)</span>
       </div>
     </div>
   `).join('');
@@ -1376,14 +1376,17 @@ function renderGanttSVG(r){
   // Phases group
   groupHeader(groups[0].label, groups[0].color, groups[0].rows);
   GANTT_PHASES.forEach(([ps,pas,pf,paf,label]) => {
-    const midY = y + rowH/2 - 8;
-    svg += `<text class="row-label" x="${leftLabelW-10}" y="${midY+4}">${label}</text>`;
+    const rowTop = y;
+    const plannedY = rowTop + 9;
+    const actualY = rowTop + 23;
+    svg += `<text class="row-label" x="${leftLabelW-10}" y="${rowTop+rowH/2+4}">${label}</text>`;
+    svg += `<text x="${leftLabelW+4}" y="${plannedY+3}" font-size="8" fill="var(--muted)" font-family="'IBM Plex Mono', monospace">PLAN</text>`;
 
     const pStart = toTime(r[ps]), pFinish = toTime(r[pf]);
     if (pStart && pFinish){
       const x1 = xPos(pStart), x2 = xPos(pFinish);
       const rows = [{label:'Inicio', value:fmtD(r[ps])},{label:'Fin', value:fmtD(r[pf])}];
-      svg += `<rect ${ttAttrs(label+' — Planificado', rows)} x="${x1}" y="${midY-6}" width="${Math.max(x2-x1,2)}" height="12" rx="3" fill="var(--panel-2)" stroke="var(--line)" />`;
+      svg += `<rect ${ttAttrs(label+' — Planificado', rows)} x="${x1}" y="${plannedY-5}" width="${Math.max(x2-x1,2)}" height="10" rx="3" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4,2" />`;
     }
     const aStart = toTime(r[pas]), aFinish = toTime(r[paf]);
     if (aStart){
@@ -1391,7 +1394,16 @@ function renderGanttSVG(r){
       const x1 = xPos(aStart), x2 = xPos(endT);
       const color = aFinish ? 'var(--green)' : 'var(--steel)';
       const rows = [{label:'Inicio', value:fmtD(r[pas])},{label:'Fin', value: aFinish ? fmtD(r[paf]) : 'En curso'}];
-      svg += `<rect ${ttAttrs(label+' — Real', rows)} x="${x1}" y="${midY-4}" width="${Math.max(x2-x1,2)}" height="8" rx="3" fill="${color}" />`;
+      svg += `<rect ${ttAttrs(label+' — Real', rows)} x="${x1}" y="${actualY-5}" width="${Math.max(x2-x1,2)}" height="10" rx="3" fill="${color}" />`;
+
+      if (pFinish && aFinish){
+        const deltaDays = Math.round((aFinish - pFinish) / 86400000);
+        const deltaColor = deltaDays > 0 ? 'var(--red)' : (deltaDays < 0 ? 'var(--green)' : 'var(--muted)');
+        const deltaText = deltaDays === 0 ? '0d' : (deltaDays > 0 ? `+${deltaDays}d` : `${deltaDays}d`);
+        svg += `<text x="${x2+6}" y="${actualY+3}" font-size="10" font-weight="600" fill="${deltaColor}" font-family="'IBM Plex Mono', monospace">${deltaText}</text>`;
+      } else if (!aFinish){
+        svg += `<text x="${x2+6}" y="${actualY+3}" font-size="9" fill="var(--steel)" font-family="'IBM Plex Mono', monospace">en curso</text>`;
+      }
     }
     y += rowH;
   });
@@ -1400,26 +1412,37 @@ function renderGanttSVG(r){
   function renderMilestoneGroup(group, list){
     groupHeader(group.label, group.color, group.rows);
     list.forEach(([pKey,aKey,label]) => {
-      const midY = y + rowH/2 - 8;
-      svg += `<text class="row-label" x="${leftLabelW-10}" y="${midY+4}">${label}</text>`;
+      const rowTop = y;
+      const plannedY = rowTop + 10;
+      const actualY = rowTop + 22;
+      svg += `<text class="row-label" x="${leftLabelW-10}" y="${rowTop+rowH/2+4}">${label}</text>`;
 
       const pT = toTime(r[pKey]);
       const aT = toTime(r[aKey]);
       const nowT = new Date(today+'T00:00:00').getTime();
 
-      if (pT && aT){
-        svg += `<line x1="${xPos(pT)}" y1="${midY}" x2="${xPos(aT)}" y2="${midY}" stroke="var(--line)" stroke-width="1.5" />`;
-      }
       if (pT){
         const rows = [{label:'Estado', value:'Planificado'},{label:'Fecha', value:fmtD(r[pKey])}];
-        svg += `<circle ${ttAttrs(label, rows)} cx="${xPos(pT)}" cy="${midY}" r="5" fill="var(--panel-2)" stroke="var(--muted)" stroke-width="1.5" />`;
+        svg += `<circle ${ttAttrs(label, rows)} cx="${xPos(pT)}" cy="${plannedY}" r="4.5" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="2,1.5" />`;
       }
       if (aT){
+        const deltaDays = pT ? Math.round((aT - pT) / 86400000) : null;
         const rows = [{label:'Estado', value:'Completado'},{label:'Fecha', value:fmtD(r[aKey])}];
-        svg += `<circle ${ttAttrs(label, rows)} cx="${xPos(aT)}" cy="${midY}" r="5" fill="var(--green)" />`;
+        if (deltaDays !== null) rows.push({label:'Diferencia', value: deltaDays===0?'A tiempo':(deltaDays>0?`+${deltaDays} días`:`${deltaDays} días`)});
+        svg += `<circle ${ttAttrs(label, rows)} cx="${xPos(aT)}" cy="${actualY}" r="4.5" fill="var(--green)" />`;
+        if (pT){
+          const lineColor = aT > pT ? 'var(--red)' : 'var(--green)';
+          svg += `<line x1="${xPos(pT)}" y1="${plannedY}" x2="${xPos(aT)}" y2="${actualY}" stroke="${lineColor}" stroke-width="1" opacity="0.5" />`;
+          if (deltaDays !== 0){
+            const deltaColor = deltaDays > 0 ? 'var(--red)' : 'var(--green)';
+            const deltaText = deltaDays > 0 ? `+${deltaDays}d` : `${deltaDays}d`;
+            svg += `<text x="${xPos(aT)+7}" y="${actualY+3}" font-size="9" font-weight="600" fill="${deltaColor}" font-family="'IBM Plex Mono', monospace">${deltaText}</text>`;
+          }
+        }
       } else if (pT && pT < nowT){
         const rows = [{label:'Estado', value:'Pendiente (vencido)'},{label:'Planificado', value:fmtD(r[pKey])}];
-        svg += `<circle ${ttAttrs(label, rows)} cx="${xPos(pT)}" cy="${midY}" r="5" fill="var(--red)" />`;
+        svg += `<circle ${ttAttrs(label, rows)} cx="${xPos(pT)}" cy="${actualY}" r="4.5" fill="var(--red)" />`;
+        svg += `<text x="${xPos(pT)+7}" y="${actualY+3}" font-size="9" font-weight="600" fill="var(--red)" font-family="'IBM Plex Mono', monospace">vencido</text>`;
       }
       y += rowH;
     });
