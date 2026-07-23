@@ -1549,33 +1549,45 @@ document.getElementById('issuesModal').addEventListener('click', (e) => {
   if (e.target.id === 'issuesModal') document.getElementById('issuesModal').classList.remove('open');
 });
 
+const ISSUE_LABELS_EN = [
+  { title: 'Structures in "Fabrication Status" missing from "Weight Dst. List"', desc: 'Compares job_ref values across both Excel tabs. May indicate rows forgotten when copying the weight breakdown.' },
+  { title: 'Structures in "Weight Dst. List" missing from "Fabrication Status"', desc: 'The reverse case: a weight breakdown with no associated fabrication tracking.' },
+  { title: 'Structures in "Fabrication Status" missing from "Time Sch."', desc: 'Structures with fabrication tracking but no milestone dates (procurement, TEKLA, JV approval, etc).' },
+  { title: 'Structures in "Time Sch." missing from "Fabrication Status"', desc: 'Have a milestone schedule but do not appear in the weekly fabrication tracking.' },
+  { title: 'Short Name duplicated across multiple structures', desc: 'The same short name (e.g. MSS865) assigned to more than one job_ref. May be intentional (subdivisions) or a copy error.' },
+  { title: 'Structures flagged as HOLD', desc: 'Rows whose description contains "HOLD" — typically pending a decision or frozen.' },
+];
+
 function exportIssuesPDF(){
   const groups = computeIssues();
   const holdCount = allRows.filter(isHold).length;
   const totalIssues = groups.reduce((a,g) => a + g.items.length, 0);
   const now = new Date();
-  const dateStr = now.toLocaleDateString('es-ES', { day:'2-digit', month:'long', year:'numeric' });
-  const timeStr = now.toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' });
+  const dateStr = now.toLocaleDateString('en-US', { day:'2-digit', month:'long', year:'numeric' });
+  const timeStr = now.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
 
   const severityColor = (n) => n === 0 ? '#1a9c5e' : (n <= 3 ? '#c98a1a' : '#c73e3e');
   const severityBg = (n) => n === 0 ? '#e7f7ef' : (n <= 3 ? '#fdf3e0' : '#fbe9e9');
 
-  const sectionsHTML = groups.map(g => `
+  const sectionsHTML = groups.map((g, i) => {
+    const en = ISSUE_LABELS_EN[i] || { title: g.title, desc: g.desc };
+    return `
     <div class="pdf-section">
       <div class="pdf-section-head" style="background:${severityBg(g.items.length)}; border-left:5px solid ${severityColor(g.items.length)};">
-        <div class="pdf-section-title">${g.title}</div>
+        <div class="pdf-section-title">${en.title}</div>
         <div class="pdf-section-badge" style="background:${severityColor(g.items.length)};">${g.items.length}</div>
       </div>
-      <div class="pdf-section-desc">${g.desc}</div>
-      ${g.items.length ? `<ul class="pdf-list">${g.items.map(i => `<li>${i}</li>`).join('')}</ul>` : '<div class="pdf-ok">✓ Sin hallazgos</div>'}
+      <div class="pdf-section-desc">${en.desc}</div>
+      ${g.items.length ? `<ul class="pdf-list">${g.items.map(i => `<li>${i}</li>`).join('')}</ul>` : '<div class="pdf-ok">✓ No findings</div>'}
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>RIYAS — Reporte de Issues</title>
+<title>RIYAS — Issues Report</title>
 <style>
   @page { size: A4; margin: 18mm 16mm; }
   * { box-sizing: border-box; }
@@ -1633,37 +1645,37 @@ function exportIssuesPDF(){
 <body>
 
 <div class="print-bar no-print">
-  <span>Vista previa del reporte — usa el botón para guardarlo como PDF</span>
-  <button onclick="window.print()">🖨 Guardar como PDF</button>
+  <span>Report preview — use the button below to save it as a PDF</span>
+  <button onclick="window.print()">🖨 Save as PDF</button>
 </div>
 
 <div style="padding: 24px 32px;">
   <div class="pdf-header">
     <div>
       <div class="pdf-eyebrow">RIYAS · NGL Fractionation Facilities</div>
-      <h1 class="pdf-title">Reporte de Issues — Fabrication Status</h1>
+      <h1 class="pdf-title">Issues Report — Fabrication Status</h1>
     </div>
-    <div class="pdf-meta">Generado el ${dateStr}<br>${timeStr}</div>
+    <div class="pdf-meta">Generated on ${dateStr}<br>${timeStr}</div>
   </div>
 
   <div class="pdf-summary">
     <div class="pdf-kpi" style="background:${severityBg(totalIssues)};">
-      <div class="pdf-kpi-label">Total hallazgos</div>
+      <div class="pdf-kpi-label">Total findings</div>
       <div class="pdf-kpi-value" style="color:${severityColor(totalIssues)};">${totalIssues}</div>
     </div>
     <div class="pdf-kpi" style="background:${severityBg(holdCount)};">
-      <div class="pdf-kpi-label">Estructuras en HOLD</div>
+      <div class="pdf-kpi-label">Structures on HOLD</div>
       <div class="pdf-kpi-value" style="color:${severityColor(holdCount)};">${holdCount}</div>
     </div>
     <div class="pdf-kpi" style="background:#eef4f9;">
-      <div class="pdf-kpi-label">Estructuras totales</div>
+      <div class="pdf-kpi-label">Total structures</div>
       <div class="pdf-kpi-value" style="color:#14324f;">${allRows.length}</div>
     </div>
   </div>
 
   ${sectionsHTML}
 
-  <div class="pdf-footer">RIYAS NGL Fractionation Facilities — Dashboard de Fabricación · Datos desde Supabase · Reporte generado automáticamente</div>
+  <div class="pdf-footer">RIYAS NGL Fractionation Facilities — Fabrication Dashboard · Data sourced from Supabase · Report generated automatically</div>
 </div>
 
 </body>
