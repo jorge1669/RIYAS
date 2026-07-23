@@ -477,7 +477,10 @@
   <div class="modal-box">
     <div class="modal-head">
       <div class="modal-title">Issues detectados</div>
-      <button class="modal-close" id="issuesModalClose">✕</button>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button class="btn" id="issuesPdfBtn">📄 Exportar PDF</button>
+        <button class="modal-close" id="issuesModalClose">✕</button>
+      </div>
     </div>
     <div class="modal-subtitle">Comprobaciones automáticas de consistencia entre las 3 pestañas del Excel (Fabrication Status, Weight Dst. List, Time Sch.) y dentro de cada tabla.</div>
     <div id="issuesContent"></div>
@@ -1545,6 +1548,134 @@ document.getElementById('issuesModalClose').addEventListener('click', () => {
 document.getElementById('issuesModal').addEventListener('click', (e) => {
   if (e.target.id === 'issuesModal') document.getElementById('issuesModal').classList.remove('open');
 });
+
+function exportIssuesPDF(){
+  const groups = computeIssues();
+  const holdCount = allRows.filter(isHold).length;
+  const totalIssues = groups.reduce((a,g) => a + g.items.length, 0);
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('es-ES', { day:'2-digit', month:'long', year:'numeric' });
+  const timeStr = now.toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' });
+
+  const severityColor = (n) => n === 0 ? '#1a9c5e' : (n <= 3 ? '#c98a1a' : '#c73e3e');
+  const severityBg = (n) => n === 0 ? '#e7f7ef' : (n <= 3 ? '#fdf3e0' : '#fbe9e9');
+
+  const sectionsHTML = groups.map(g => `
+    <div class="pdf-section">
+      <div class="pdf-section-head" style="background:${severityBg(g.items.length)}; border-left:5px solid ${severityColor(g.items.length)};">
+        <div class="pdf-section-title">${g.title}</div>
+        <div class="pdf-section-badge" style="background:${severityColor(g.items.length)};">${g.items.length}</div>
+      </div>
+      <div class="pdf-section-desc">${g.desc}</div>
+      ${g.items.length ? `<ul class="pdf-list">${g.items.map(i => `<li>${i}</li>`).join('')}</ul>` : '<div class="pdf-ok">✓ Sin hallazgos</div>'}
+    </div>
+  `).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>RIYAS — Reporte de Issues</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body{
+    font-family: Arial, Helvetica, sans-serif;
+    color: #1c2530;
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .pdf-header{
+    display:flex; justify-content:space-between; align-items:flex-end;
+    border-bottom: 3px solid #14324f; padding-bottom: 14px; margin-bottom: 22px;
+  }
+  .pdf-eyebrow{ font-size:11px; letter-spacing:0.08em; color:#c98a1a; font-weight:700; text-transform:uppercase; margin-bottom:4px; }
+  .pdf-title{ font-size:24px; font-weight:800; color:#14324f; margin:0; text-transform:uppercase; letter-spacing:0.01em; }
+  .pdf-meta{ text-align:right; font-size:11px; color:#5c6b7f; line-height:1.5; }
+
+  .pdf-summary{ display:flex; gap:12px; margin-bottom: 26px; }
+  .pdf-kpi{ flex:1; border-radius:8px; padding:14px 16px; border:1px solid #e2e6ea; }
+  .pdf-kpi-label{ font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:#5c6b7f; margin-bottom:6px; font-weight:700; }
+  .pdf-kpi-value{ font-size:26px; font-weight:800; }
+
+  .pdf-section{ margin-bottom:20px; break-inside: avoid; }
+  .pdf-section-head{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:10px 14px; border-radius:0 6px 6px 0; margin-bottom:6px;
+  }
+  .pdf-section-title{ font-weight:700; font-size:13.5px; color:#1c2530; }
+  .pdf-section-badge{
+    color:#fff; font-weight:800; font-size:13px; min-width:26px; height:26px;
+    border-radius:13px; display:flex; align-items:center; justify-content:center; padding:0 8px;
+  }
+  .pdf-section-desc{ font-size:11px; color:#5c6b7f; margin: 4px 0 8px 14px; }
+  .pdf-list{ margin:0 0 0 14px; padding-left:18px; font-size:12px; line-height:1.7; color:#1c2530; }
+  .pdf-list li{ margin-bottom:2px; }
+  .pdf-ok{ margin-left:14px; color:#1a9c5e; font-weight:700; font-size:12px; }
+
+  .pdf-footer{ margin-top:30px; padding-top:12px; border-top:1px solid #e2e6ea; font-size:9.5px; color:#8a97a8; text-align:center; }
+
+  @media print {
+    .no-print{ display:none; }
+  }
+  .print-bar{
+    position:sticky; top:0; background:#14324f; color:#fff; padding:10px 16px;
+    display:flex; justify-content:space-between; align-items:center; font-family:Arial, sans-serif; font-size:13px;
+  }
+  .print-bar button{
+    background:#c98a1a; color:#fff; border:none; padding:8px 16px; border-radius:5px; font-weight:700; cursor:pointer; font-size:13px;
+  }
+</style>
+</head>
+<body>
+
+<div class="print-bar no-print">
+  <span>Vista previa del reporte — usa el botón para guardarlo como PDF</span>
+  <button onclick="window.print()">🖨 Guardar como PDF</button>
+</div>
+
+<div style="padding: 24px 32px;">
+  <div class="pdf-header">
+    <div>
+      <div class="pdf-eyebrow">RIYAS · NGL Fractionation Facilities</div>
+      <h1 class="pdf-title">Reporte de Issues — Fabrication Status</h1>
+    </div>
+    <div class="pdf-meta">Generado el ${dateStr}<br>${timeStr}</div>
+  </div>
+
+  <div class="pdf-summary">
+    <div class="pdf-kpi" style="background:${severityBg(totalIssues)};">
+      <div class="pdf-kpi-label">Total hallazgos</div>
+      <div class="pdf-kpi-value" style="color:${severityColor(totalIssues)};">${totalIssues}</div>
+    </div>
+    <div class="pdf-kpi" style="background:${severityBg(holdCount)};">
+      <div class="pdf-kpi-label">Estructuras en HOLD</div>
+      <div class="pdf-kpi-value" style="color:${severityColor(holdCount)};">${holdCount}</div>
+    </div>
+    <div class="pdf-kpi" style="background:#eef4f9;">
+      <div class="pdf-kpi-label">Estructuras totales</div>
+      <div class="pdf-kpi-value" style="color:#14324f;">${allRows.length}</div>
+    </div>
+  </div>
+
+  ${sectionsHTML}
+
+  <div class="pdf-footer">RIYAS NGL Fractionation Facilities — Dashboard de Fabricación · Datos desde Supabase · Reporte generado automáticamente</div>
+</div>
+
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+}
+
+document.getElementById('issuesPdfBtn').addEventListener('click', exportIssuesPDF);
 
 /* ---------------- CHANGES TAB ---------------- */
 
