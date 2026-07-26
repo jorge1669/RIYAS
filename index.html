@@ -649,7 +649,7 @@ async function loadData(){
     allRows = await structRes.json();
     breakdownRows = await breakdownRes.json();
     timeScheduleRows = await tsRes.json();
-    setStatus('ok', `Conectado · ${allRows.length} estructuras`);
+    setStatus('ok', `Conectado · ${timeScheduleRows.length} estructuras`);
     renderOverview();
     renderBreakdown();
     renderCronograma();
@@ -930,6 +930,9 @@ function renderOverview(){
   const pk1 = summarize(allRows.filter(r=>r.package==='PK1'));
   const pk2 = summarize(allRows.filter(r=>r.package==='PK2'));
 
+  const tsPk1Count = timeScheduleRows.filter(r=>r.package==='PK1').length;
+  const tsPk2Count = timeScheduleRows.filter(r=>r.package==='PK2').length;
+
   const holdItems = allRows.filter(isHold);
 
   const app = document.getElementById('overviewTab');
@@ -945,8 +948,8 @@ function renderOverview(){
     <div class="kpi-row">
       <div class="kpi" style="--accent: var(--steel)">
         <div class="kpi-label">Estructuras totales</div>
-        <div class="kpi-value mono">${all.count}</div>
-        <div class="kpi-sub">PK1: ${pk1.count} · PK2: ${pk2.count}</div>
+        <div class="kpi-value mono">${timeScheduleRows.length}</div>
+        <div class="kpi-sub">PK1: ${tsPk1Count} · PK2: ${tsPk2Count} · (según Time Sch.)</div>
       </div>
       <div class="kpi" style="--accent: var(--muted)">
         <div class="kpi-label">Peso emitido</div>
@@ -1662,7 +1665,7 @@ function exportIssuesPDF(){
     </div>
     <div class="pdf-kpi" style="background:#eef4f9;">
       <div class="pdf-kpi-label">Total structures</div>
-      <div class="pdf-kpi-value" style="color:#14324f;">${allRows.length}</div>
+      <div class="pdf-kpi-value" style="color:#14324f;">${timeScheduleRows.length}</div>
     </div>
   </div>
 
