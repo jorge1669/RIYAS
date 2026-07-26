@@ -623,6 +623,10 @@ function setStatus(state, text){
   txt.textContent = text;
 }
 
+function activeTimeSchedule(){
+  return timeScheduleRows.filter(r => r.package !== 'Del');
+}
+
 async function loadData(){
   setStatus('loading', 'Consultando Supabase…');
   document.getElementById('refreshBtn').disabled = true;
@@ -649,7 +653,7 @@ async function loadData(){
     allRows = await structRes.json();
     breakdownRows = await breakdownRes.json();
     timeScheduleRows = await tsRes.json();
-    setStatus('ok', `Conectado · ${timeScheduleRows.length} estructuras`);
+    setStatus('ok', `Conectado · ${activeTimeSchedule().length} estructuras`);
     renderOverview();
     renderBreakdown();
     renderCronograma();
@@ -747,6 +751,29 @@ const TXT_FIELDS = new Set([
   'dwg_number','structure','model_description','subcontractor_erection','remark','discussions'
 ]);
 
+function parseTimeSchedule(rows, cols, startIdx){
+  const dataRows = rows.slice(startIdx);
+  const parsed = [];
+  for (const r of dataRows){
+    const obj = {};
+    cols.forEach((colName, idx) => {
+      if (!colName) return;
+      const raw = r ? r[idx] : null;
+      if (DATE_FIELDS.has(colName)) obj[colName] = excelDateToISO(raw);
+      else if (TXT_FIELDS.has(colName)) obj[colName] = cleanTxt(raw);
+      else obj[colName] = cleanNum(raw);
+    });
+    // A valid structure row needs a package + a structure name, even if job_ref hasn't been assigned yet
+    if (!obj.package || !obj.structure) continue;
+    if (!obj.job_ref){
+      if (!obj.short_name) continue; // no way to build a stable synthetic key
+      obj.job_ref = 'PENDING-' + obj.short_name;
+    }
+    parsed.push(obj);
+  }
+  return parsed;
+}
+
 function parseSheetRows(rows, cols, startIdx){
   const dataRows = rows.slice(startIdx);
   const parsed = [];
@@ -786,7 +813,7 @@ async function parseExcelFile(file){
   const tsSheetName = wb.SheetNames.find(n => n.toLowerCase().includes('time') || n.toLowerCase().includes('sch'));
   if (tsSheetName){
     const tsRows = XLSX.utils.sheet_to_json(wb.Sheets[tsSheetName], { header: 1, raw: true, defval: null });
-    tsParsed = parseSheetRows(tsRows, TS_COLS, 6);
+    tsParsed = parseTimeSchedule(tsRows, TS_COLS, 6);
   }
 
   return { fabParsed, wdParsed, tsParsed };
@@ -930,8 +957,9 @@ function renderOverview(){
   const pk1 = summarize(allRows.filter(r=>r.package==='PK1'));
   const pk2 = summarize(allRows.filter(r=>r.package==='PK2'));
 
-  const tsPk1Count = timeScheduleRows.filter(r=>r.package==='PK1').length;
-  const tsPk2Count = timeScheduleRows.filter(r=>r.package==='PK2').length;
+  const tsActive = activeTimeSchedule();
+  const tsPk1Count = tsActive.filter(r=>r.package==='PK1').length;
+  const tsPk2Count = tsActive.filter(r=>r.package==='PK2').length;
 
   const holdItems = allRows.filter(isHold);
 
@@ -948,7 +976,7 @@ function renderOverview(){
     <div class="kpi-row">
       <div class="kpi" style="--accent: var(--steel)">
         <div class="kpi-label">Estructuras totales</div>
-        <div class="kpi-value mono">${timeScheduleRows.length}</div>
+        <div class="kpi-value mono">${tsActive.length}</div>
         <div class="kpi-sub">PK1: ${tsPk1Count} · PK2: ${tsPk2Count} · (según Time Sch.)</div>
       </div>
       <div class="kpi" style="--accent: var(--muted)">
@@ -1243,7 +1271,7 @@ function renderCronograma(){
   panel.innerHTML = `
     <div class="toolbar">
       <input type="text" id="cronSearchInput" placeholder="Busca una estructura por Job Ref, Short Name o descripción…">
-      <span class="count" id="cronCount">${timeScheduleRows.length} estructuras en cronograma</span>
+      <span class="count" id="cronCount">${activeTimeSchedule().length} estructuras en cronograma</span>
     </div>
     <div id="cronResults"></div>
   `;
@@ -1665,7 +1693,7 @@ function exportIssuesPDF(){
     </div>
     <div class="pdf-kpi" style="background:#eef4f9;">
       <div class="pdf-kpi-label">Total structures</div>
-      <div class="pdf-kpi-value" style="color:#14324f;">${timeScheduleRows.length}</div>
+      <div class="pdf-kpi-value" style="color:#14324f;">${activeTimeSchedule().length}</div>
     </div>
   </div>
 
