@@ -781,9 +781,6 @@ function parseSheetRows(rows, cols, startIdx){
   const dataRows = rows.slice(startIdx);
   const parsed = [];
   for (const r of dataRows){
-    if (!r || r[0] === null || r[0] === undefined || String(r[0]).trim() === '') {
-      // some sheets key off a later column (job_ref), so don't bail purely on col 0
-    }
     const obj = {};
     cols.forEach((colName, idx) => {
       if (!colName) return;
@@ -881,6 +878,30 @@ document.getElementById('excelInput').addEventListener('change', async (e) => {
     if (tsParsed.length > 0){
       statusEl.textContent = `Subiendo ${tsParsed.length} filas de cronograma…`;
       await upsertRows('time_schedule', tsParsed, 'job_ref');
+
+      // Clean up stale "PENDING-x" placeholders that now have a real Job Ref counterpart
+      const realNew = tsParsed.filter(r => !r.job_ref.startsWith('PENDING-'));
+      if (realNew.length > 0){
+        const allTsRes = await fetch(`${SUPABASE_URL}/rest/v1/time_schedule?select=job_ref,short_name,dwg_number`, {
+          headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+        });
+        if (allTsRes.ok){
+          const allTs = await allTsRes.json();
+          const pendingRows = allTs.filter(r => r.job_ref.startsWith('PENDING-'));
+          const staleRefs = pendingRows
+            .filter(p => realNew.some(real =>
+              (p.short_name && real.short_name === p.short_name) ||
+              (p.dwg_number && real.dwg_number === p.dwg_number)
+            ))
+            .map(p => p.job_ref);
+          for (const ref of staleRefs){
+            await fetch(`${SUPABASE_URL}/rest/v1/time_schedule?job_ref=eq.${encodeURIComponent(ref)}`, {
+              method: 'DELETE',
+              headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${session.access_token}` }
+            });
+          }
+        }
+      }
     }
 
     statusEl.textContent = 'Calculando cambios frente a la versión anterior…';
@@ -935,12 +956,10 @@ function hideTooltip(){
 }
 
 function showHTMLTooltip(evt, title, rows){
-  tooltipEl.innerHTML = `
+  renderTooltipHTML(evt, `
     <div class="tt-title">${title}</div>
     ${rows.map(r => `<div class="tt-row"><span>${r.label}</span><span>${r.value}</span></div>`).join('')}
-  `;
-  positionTooltip(evt);
-  tooltipEl.style.display = 'block';
+  `);
 }
 
 /* ---------------- OVERVIEW RENDER ---------------- */
@@ -1254,21 +1273,6 @@ document.getElementById('refreshBtn').addEventListener('click', loadData);
 
 /* ---------------- CRONOGRAMA TAB ---------------- */
 
-const MILESTONE_PAIRS = [
-  ['po_issue_date_planned','po_issue_date_actual','Emisión Orden de Compra (PO)'],
-  ['raw_material_receiving_planned','raw_material_receiving_actual','Recepción Materia Prima'],
-  ['connection_design_calc_planned','connection_design_calc_actual','Cálculo Diseño Conexión (Ingeniería)'],
-  ['tekla_model_planned','tekla_model_actual','Modelo TEKLA y Planos Erección'],
-  ['approval_jv_planned','approval_jv_actual','Aprobación JV'],
-  ['iff_date_planned','iff_date_actual','Fecha IFF'],
-  ['fab_start_planned','fab_start_actual','Inicio Fabricación'],
-  ['fab_finish_planned','fab_finish_actual','Fin Fabricación'],
-  ['surface_treatment_start_planned','surface_treatment_start_actual','Inicio Tratamiento Superficial'],
-  ['surface_treatment_finish_planned','surface_treatment_finish_actual','Fin Tratamiento Superficial'],
-  ['delivery_start_planned','delivery_start_actual','Inicio Entrega'],
-  ['delivery_finish_planned','delivery_finish_actual','Fin Entrega'],
-];
-
 function renderCronograma(){
   const panel = document.getElementById('cronogramaTab');
   panel.innerHTML = `
@@ -1288,7 +1292,7 @@ function renderCronogramaResults(){
     resultsEl.innerHTML = '<div class="center-msg" style="padding:30px;">Escribe para buscar una estructura y ver su cronograma completo.</div>';
     return;
   }
-  const matches = timeScheduleRows.filter(r => {
+  const matches = activeTimeSchedule().filter(r => {
     const hay = [r.job_ref, r.short_name, r.structure, r.model_description].filter(Boolean).join(' ').toLowerCase();
     return hay.includes(search);
   }).slice(0, 20);
@@ -1498,14 +1502,17 @@ function renderGanttSVG(r){
 /* ---------------- ISSUES ---------------- */
 
 function computeIssues(){
+  const tsActive = activeTimeSchedule();
   const fabRefs = new Set(allRows.map(r => r.job_ref));
   const wdRefs = new Set(breakdownRows.map(r => r.job_ref));
-  const tsRefs = new Set(timeScheduleRows.map(r => r.job_ref));
+  const tsRefs = new Set(tsActive.map(r => r.job_ref));
 
   const fabNotInWd = allRows.filter(r => !wdRefs.has(r.job_ref));
   const wdNotInFab = breakdownRows.filter(r => !fabRefs.has(r.job_ref));
   const fabNotInTs = allRows.filter(r => !tsRefs.has(r.job_ref));
-  const tsNotInFab = timeScheduleRows.filter(r => !fabRefs.has(r.job_ref));
+  // Rows still waiting on a real Job Ref (synthetic "PENDING-" key) are expected to be
+  // absent from Fabrication Status by definition, so they're not a data-quality issue.
+  const tsNotInFab = tsActive.filter(r => !fabRefs.has(r.job_ref) && !r.job_ref.startsWith('PENDING-'));
 
   const shortNameMap = {};
   allRows.forEach(r => {
@@ -1515,6 +1522,20 @@ function computeIssues(){
   const dupShortNames = Object.entries(shortNameMap).filter(([,refs]) => refs.length > 1);
 
   const holdItems = allRows.filter(isHold);
+
+  // Detect stale "PENDING-x" placeholders that now have a real job_ref counterpart
+  // sharing the same short_name or dwg_number (e.g. a structure that got its Job Ref
+  // assigned this week, leaving the old placeholder orphaned).
+  const stalePending = [];
+  const pendingRows = tsActive.filter(r => r.job_ref.startsWith('PENDING-'));
+  const realRows = tsActive.filter(r => !r.job_ref.startsWith('PENDING-'));
+  pendingRows.forEach(p => {
+    const match = realRows.find(real =>
+      (p.short_name && real.short_name === p.short_name) ||
+      (p.dwg_number && real.dwg_number === p.dwg_number)
+    );
+    if (match) stalePending.push(`${p.job_ref} (${p.structure || p.short_name}) → ya asignado como ${match.job_ref}`);
+  });
 
   return [
     {
@@ -1546,6 +1567,11 @@ function computeIssues(){
       title: 'Estructuras marcadas en HOLD',
       desc: 'Filas cuya descripción contiene "HOLD" — normalmente pendientes de decisión o congeladas.',
       items: holdItems.map(r => `${r.job_ref} — ${r.structure_description}`)
+    },
+    {
+      title: 'Marcadores "PENDING" obsoletos en Cronograma',
+      desc: 'Estructuras que se cargaron sin Job Ref asignado (con un identificador temporal "PENDING-X") y que ya tienen un Job Ref real esta semana. La fila antigua debería eliminarse para no contar la estructura dos veces.',
+      items: stalePending
     }
   ];
 }
@@ -1590,6 +1616,7 @@ const ISSUE_LABELS_EN = [
   { title: 'Structures in "Time Sch." missing from "Fabrication Status"', desc: 'Have a milestone schedule but do not appear in the weekly fabrication tracking.' },
   { title: 'Short Name duplicated across multiple structures', desc: 'The same short name (e.g. MSS865) assigned to more than one job_ref. May be intentional (subdivisions) or a copy error.' },
   { title: 'Structures flagged as HOLD', desc: 'Rows whose description contains "HOLD" — typically pending a decision or frozen.' },
+  { title: 'Stale "PENDING" placeholders in Cronograma', desc: 'Structures loaded without a Job Ref (temporary "PENDING-x" key) that now have a real Job Ref this week. The old row should be removed to avoid double-counting.' },
 ];
 
 function exportIssuesPDF(){
