@@ -624,7 +624,7 @@ function setStatus(state, text){
 }
 
 function activeTimeSchedule(){
-  return timeScheduleRows.filter(r => r.package !== 'Del');
+  return timeScheduleRows.filter(r => (r.package || '').toUpperCase() !== 'DEL');
 }
 
 async function loadData(){
@@ -763,11 +763,14 @@ function parseTimeSchedule(rows, cols, startIdx){
       else if (TXT_FIELDS.has(colName)) obj[colName] = cleanTxt(raw);
       else obj[colName] = cleanNum(raw);
     });
-    // A valid structure row needs a package + a structure name, even if job_ref hasn't been assigned yet
-    if (!obj.package || !obj.structure) continue;
+    // A row counts as an assigned structure if it has a DWG number (col C) and/or a package+structure name,
+    // even if job_ref (col J) hasn't been assigned yet. Package = DEL rows are still imported but excluded
+    // from active counts elsewhere (activeTimeSchedule()).
+    if (!obj.dwg_number && !(obj.package && obj.structure)) continue;
     if (!obj.job_ref){
-      if (!obj.short_name) continue; // no way to build a stable synthetic key
-      obj.job_ref = 'PENDING-' + obj.short_name;
+      if (obj.short_name) obj.job_ref = 'PENDING-' + obj.short_name;
+      else if (obj.dwg_number) obj.job_ref = 'PENDING-' + obj.dwg_number;
+      else continue; // no way to build a stable synthetic key
     }
     parsed.push(obj);
   }
